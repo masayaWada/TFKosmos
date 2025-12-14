@@ -1,0 +1,42 @@
+[package]
+name = "tfkosmos"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["macros", "multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# AWS SDK
+aws-sdk-iam = "1"
+aws-config = "1"
+aws-sdk-sts = "1"
+
+# Azure SDK for Rust
+azure_identity = "0.30"
+azure_core = "0.30"
+reqwest = { version = "0.11", features = ["json"] }
+
+# Template engine
+minijinja = "1.0"
+
+# Utilities
+anyhow = "1.0"
+thiserror = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+zip = "0.6"
+futures = "0.3"
+lazy_static = "1.4"
+
+[dev-dependencies]
+tokio-test = "0.4"

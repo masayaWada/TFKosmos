@@ -1,0 +1,15 @@
+resource "aws_iam_policy" "{{ resource_name }}" {
+  name        = "{{ policy.policy_name }}"
+  path        = "{{ policy.path }}"
+  description = "{{ policy.policy_name }}"
+
+  policy = jsonencode({{ policy.policy_document }})
+{% if policy.tags %}
+  tags = {
+{% for key, value in policy.tags.items() %}
+    "{{ key }}" = "{{ value }}"
+{% endfor %}
+  }
+{% endif %}
+}
+
