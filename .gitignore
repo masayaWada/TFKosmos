@@ -145,3 +145,7 @@ templates_user/
 # Generated terraform output
 terraform-output/
 **/terraform-output/
+
+# Tauri build artifacts
+deployment/src-tauri/target/
+deployment/src-tauri/Cargo.lock

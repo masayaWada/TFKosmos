@@ -4,29 +4,29 @@
   <img src="assets/icon/readme.png" alt="TFKosmos Logo" width="400">
 </div>
 
-## TFKosmos について
+## TFKosmos について 🚀
 
 TFKosmos は、既存のクラウド環境（実機構成）を解析し、
 Terraform のコードおよび import 定義を再構築するためのツールです。
 
 多くの現場では、長年の運用や障害対応、緊急変更の積み重ねによって、
 インフラの実態がコードとして表現されないまま複雑化していきます。
-このような状態は、再現性・可視性・保守性の面で大きな課題となります。
+このような状態は、再現性・可視性・保守性の面で大きな課題となります。💡
 
 TFKosmos は、その **混沌（Chaos）** とした実機構成を一度正しく理解し、
 Terraform という **秩序（Cosmos）** あるコードへと再構成することを目的としています。
 
-## ツールの特徴
+## ツールの特徴 ✨
 
-- 既存のクラウドリソース構成を解析し、Terraform コードを生成
-- Terraform import に必要な定義を自動的に構築
-- 手動運用・属人化した構成から IaC への移行を支援
-- 既存環境を壊すことなく、段階的な Terraform 管理への移行が可能
+- 🔍 既存のクラウドリソース構成を解析し、Terraform コードを生成
+- 🤖 Terraform import に必要な定義を自動的に構築
+- 📦 手動運用・属人化した構成から IaC への移行を支援
+- 🔒 既存環境を壊すことなく、段階的な Terraform 管理への移行が可能
 
 TFKosmos は「新しく作る」ためのツールではなく、
 すでに存在している現実のインフラを、最短距離で Terraform 管理へ導くことに重きを置いています。
 
-## 名前の由来
+## 名前の由来 📖
 
 TFKosmos は、以下の 2 つの言葉から構成されています。
 
@@ -34,40 +34,40 @@ TFKosmos は、以下の 2 つの言葉から構成されています。
 - **Kosmos**：秩序・調和（ギリシャ語）
 
 ギリシャ神話において Kosmos は、
-混沌（Chaos）から生まれた、秩序だった世界を意味します。
+混沌（Chaos）から生まれた、秩序だった世界を意味します。✨
 
 TFKosmos という名前には、
 
 **混沌とした実機構成（Chaos）を、**
-**Terraform によって秩序あるコード（Kosmos）へ変換する**
+**Terraform によって秩序あるコード（Cosmos）へ変換する**
 
 という思想が込められています。
 
-## 理念
+## 理念 💭
 
 **From Chaos to Cosmos.**
 
 TFKosmos は、
-インフラを「破壊する」ためのツールではありません。
+インフラを「破壊する」ためのツールではありません。🛡️
 
 現実に存在する構成を正しく読み解き、
 Terraform という共通言語に翻訳し、
 再現性と秩序を取り戻すためのツールです。
 
-## 機能
+## 機能 🎯
 
-- AWS IAMリソース（Users, Groups, Roles, Policies）のスキャン
-- Azure IAMリソース（Role Definitions, Role Assignments）のスキャン
-- Terraformコードの自動生成
-- カスタムテンプレート対応
-- importスクリプトの自動生成
+- ☁️ AWS IAMリソース（Users, Groups, Roles, Policies）のスキャン
+- 🔷 Azure IAMリソース（Role Definitions, Role Assignments）のスキャン
+- 📝 Terraformコードの自動生成
+- 🎨 カスタムテンプレート対応
+- 📜 importスクリプトの自動生成
 
-## セットアップ
+## セットアップ 🛠️
 
-### 前提条件
+### 必要なもの
 
-- Rust 1.70以上（[rustup](https://rustup.rs/)でインストール）
-- Node.js 18以上
+- 🦀 Rust 1.70以上（[rustup](https://rustup.rs/)でインストール）
+- 📦 Node.js 18以上
 - npm または yarn
 
 ### バックエンド（Rust）
@@ -90,7 +90,7 @@ cargo build
 cargo run
 ```
 
-#### トラブルシューティング
+#### トラブルシューティング 💡
 
 依存関係のインストールに失敗する場合：
 
@@ -126,9 +126,9 @@ cd frontend
 npm install
 ```
 
-## 実行方法
+## 実行方法 🚀
 
-### 方法1: 同時起動（推奨）
+### 方法1: 同時起動（推奨） ⭐
 
 フロントエンドとバックエンドを同時に起動する方法：
 
@@ -149,8 +149,8 @@ make dev-frontend
 make help
 ```
 
-**重要**: スキャン機能を使用するには、フロントエンドとバックエンドの両方が起動している必要があります。
-`make dev-frontend`のみを実行した場合、バックエンドに接続できず`ECONNREFUSED`エラーが発生します。
+> **💡 重要**: スキャン機能を使用するには、フロントエンドとバックエンドの両方が起動している必要があります。
+> `make dev-frontend`のみを実行した場合、バックエンドに接続できず`ECONNREFUSED`エラーが発生します。
 
 #### シェルスクリプトを使用
 
@@ -222,6 +222,9 @@ tfkosmos/
 │   ├── src/          # Reactソースコード
 │   ├── package.json  # Node.js依存関係
 │   └── vite.config.ts # Vite設定
+├── deployment/       # デスクトップアプリ（Tauri）
+│   ├── src-tauri/    # Tauri Rustプロジェクト
+│   └── package.json  # Tauriアプリ用設定
 ├── docs/             # 開発ドキュメント
 │   ├── README.md     # ドキュメントインデックス
 │   └── 詳細設計書.md # システム詳細設計書
@@ -230,7 +233,7 @@ tfkosmos/
 └── README.md         # このファイル
 ```
 
-## 技術スタック
+## 技術スタック 🛠️
 
 ### 技術スタック-バックエンド
 
@@ -247,7 +250,7 @@ tfkosmos/
 - **TypeScript**: 型安全なJavaScript
 - **Vite**: ビルドツール
 
-## ドキュメント
+## ドキュメント 📚
 
 開発用ドキュメントは [`docs/`](./docs/) ディレクトリにあります。
 

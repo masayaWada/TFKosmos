@@ -1,0 +1,30 @@
+[package]
+name = "tfkosmos"
+version = "0.1.0"
+description = "TFKosmos - Terraform code generation from existing cloud infrastructure"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = [] }
+tauri-plugin-shell = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["process", "rt"] }
+anyhow = "1.0"
+reqwest = { version = "0.11", features = ["blocking"] }
+
+[features]
+# By default, Tauri runs in production mode.
+# When `tauri dev` runs it is executed with `cargo run --no-default-features` if `devPath` is an URL
+default = ["custom-protocol"]
+# This feature is used for production builds where `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
