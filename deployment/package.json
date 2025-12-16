@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "cd src-tauri && npx tauri dev",
-    "tauri:dev": "cd src-tauri && npx tauri dev",
-    "build": "cd src-tauri && npx tauri build",
-    "tauri:build": "cd src-tauri && npx tauri build",
+    "dev": "cd src-tauri && CI=false TAURI_CI=false npx tauri dev",
+    "tauri:dev": "cd src-tauri && CI=false TAURI_CI=false npx tauri dev",
+    "build": "cd src-tauri && CI=false TAURI_CI=false npx tauri build",
+    "tauri:build": "cd src-tauri && CI=false TAURI_CI=false npx tauri build",
     "tauri": "cd src-tauri && npx tauri",
     "clean": "cd src-tauri && cargo clean"
   },

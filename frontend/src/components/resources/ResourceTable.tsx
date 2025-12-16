@@ -7,7 +7,6 @@ interface ResourceTableProps {
   onSelectionChange: (id: string, selected: boolean) => void;
   onSelectAll: (selected: boolean) => void;
   getResourceId: (resource: any) => string;
-  getResourceDisplayName: (resource: any) => string;
   columns: {
     key: string;
     label: string;
@@ -24,7 +23,6 @@ export default function ResourceTable({
   onSelectionChange,
   onSelectAll,
   getResourceId,
-  getResourceDisplayName,
   columns,
   resourceType,
 }: ResourceTableProps) {

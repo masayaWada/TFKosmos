@@ -17,7 +17,12 @@ impl BackendProcess {
         // プロジェクトルートのパスを取得
         let current_dir = std::env::current_dir()?;
         // deployment/src-tauriから実行される場合、2階層上がる
-        let project_root = if current_dir.ends_with("src-tauri") {
+        let project_root = if current_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s == "src-tauri")
+            .unwrap_or(false)
+        {
             current_dir.parent().and_then(|p| p.parent())
         } else {
             Some(current_dir.as_path())
@@ -27,7 +32,7 @@ impl BackendProcess {
         let backend_dir = project_root.join("backend");
         
         if !backend_dir.exists() {
-            return Err("Backend directory not found".into());
+            return Err(format!("Backend directory not found: {:?}", backend_dir).into());
         }
         
         // 開発モードかどうかを確認
@@ -52,8 +57,8 @@ impl BackendProcess {
         self.process = Some(child);
         println!("Backend server process spawned, waiting for server to be ready...");
         
-        // バックエンドサーバーの起動を待つ（最大30秒、初回ビルドに時間がかかる場合がある）
-        let max_wait = 30;
+        // バックエンドサーバーの起動を待つ（最大60秒、初回ビルドに時間がかかる場合がある）
+        let max_wait = 60;
         let mut waited = 0;
         let mut server_ready = false;
         
@@ -64,7 +69,7 @@ impl BackendProcess {
             // HTTPリクエストでサーバーが応答するか確認
             match reqwest::blocking::Client::new()
                 .get("http://localhost:8000/health")
-                .timeout(std::time::Duration::from_secs(1))
+                .timeout(std::time::Duration::from_secs(2))
                 .send()
             {
                 Ok(response) if response.status().is_success() => {
@@ -78,18 +83,20 @@ impl BackendProcess {
                     println!("✓ Backend server responded on http://localhost:8000");
                     break;
                 }
-                Err(_) => {
+                Err(e) => {
                     // サーバーがまだ起動していない
                     if waited % 5 == 0 {
-                        println!("Waiting for backend server to start... ({}s / {}s)", waited, max_wait);
+                        println!("Waiting for backend server to start... ({}s / {}s) - Error: {}", waited, max_wait, e);
                     }
                 }
             }
         }
         
         if !server_ready {
-            eprintln!("⚠ Warning: Backend server may not be ready yet after {} seconds.", max_wait);
-            eprintln!("  The server might still be compiling. Please check the logs above.");
+            return Err(format!(
+                "Backend server failed to start within {} seconds. Please check the logs above.",
+                max_wait
+            ).into());
         }
         
         Ok(())
@@ -126,9 +133,17 @@ fn main() {
         .setup(move |_app| {
             // バックエンドサーバーを起動
             let mut bp = backend_process_clone.lock().unwrap();
-            if let Err(e) = bp.start() {
-                eprintln!("Failed to start backend server: {}", e);
-                // エラーが発生してもアプリは続行（ユーザーが手動で起動できる）
+            match bp.start() {
+                Ok(()) => {
+                    println!("✓ Backend server started successfully");
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to start backend server: {}", e);
+                    eprintln!("   Please ensure Rust and Cargo are installed and the backend directory exists.");
+                    eprintln!("   You can also start the backend manually with: cd backend && cargo run");
+                    // バックエンドの起動に失敗した場合、アプリを続行するが警告を表示
+                    // フロントエンドはバックエンドが起動していない場合、エラーを表示する
+                }
             }
             drop(bp);
             

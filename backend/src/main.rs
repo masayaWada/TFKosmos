@@ -1,8 +1,9 @@
 use axum::http::HeaderValue;
-use axum::{http::Method, response::Json, routing::get, Router};
+use axum::{http::header, http::Method, response::Json, routing::get, Router};
 use serde_json::{json, Value};
 use tower::ServiceBuilder;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::TraceLayer;
 
 mod api;
 mod domain;
@@ -23,19 +24,14 @@ async fn main() {
         .init();
 
     // Build CORS layer
-    // Note: allow_credentials(true)とallow_headers(Any)は同時に使用できないため、
-    // 具体的なヘッダーを指定する必要があります
+    //
+    // - 開発時（Vite）:  フロントエンドは http://localhost:5173 からアクセス
+    // - Tauri(dev/本番): フロントエンドは tauri://localhost などの独自スキームからアクセス
+    //
+    // どちらのケースでもバックエンドは http://localhost:8000 を使用するため、
+    // CORS では Origin を絞り込まず Any を許可しています。
     let cors = CorsLayer::new()
-        .allow_origin(
-            "http://localhost:5173"
-                .parse::<HeaderValue>()
-                .expect("Failed to parse CORS origin header: http://localhost:5173"),
-        )
-        .allow_origin(
-            "http://localhost:3000"
-                .parse::<HeaderValue>()
-                .expect("Failed to parse CORS origin header: http://localhost:3000"),
-        )
+        .allow_origin(Any)
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -43,12 +39,7 @@ async fn main() {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([
-            axum::http::header::CONTENT_TYPE,
-            axum::http::header::AUTHORIZATION,
-            axum::http::header::ACCEPT,
-        ])
-        .allow_credentials(true);
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT]);
 
     // Build application with routes
     let app = Router::new()

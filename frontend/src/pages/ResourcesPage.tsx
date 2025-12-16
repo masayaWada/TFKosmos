@@ -194,24 +194,6 @@ export default function ResourcesPage() {
     return resource.id || JSON.stringify(resource);
   };
 
-  const getResourceDisplayName = (resource: any): string => {
-    if (activeTab === "users") return resource.user_name || "-";
-    if (activeTab === "groups") return resource.group_name || "-";
-    if (activeTab === "roles") return resource.role_name || "-";
-    if (activeTab === "policies") return resource.policy_name || "-";
-    if (activeTab === "attachments") {
-      const entityType = resource.entity_type || resource.target_type || "-";
-      const entityName = resource.entity_name || resource.target_name || "-";
-      return `${entityType}: ${entityName}`;
-    }
-    if (activeTab === "role_assignments")
-      return resource.role_definition_name || resource.assignment_id || "-";
-    if (activeTab === "role_definitions")
-      return resource.role_name || resource.role_definition_id || "-";
-    if (activeTab === "cleanup") return resource.type || "-";
-    return "-";
-  };
-
   const getColumns = () => {
     if (activeTab === "users") {
       return [
@@ -425,7 +407,6 @@ export default function ResourcesPage() {
               onSelectionChange={handleSelectionChange}
               onSelectAll={handleSelectAll}
               getResourceId={getResourceId}
-              getResourceDisplayName={getResourceDisplayName}
               columns={getColumns()}
               resourceType={activeTab}
             />

@@ -3,8 +3,8 @@ resource "aws_iam_group" "{{ resource_name }}" {
   path = "{{ group.path }}"
 {% if group.tags %}
   tags = {
-{% for key, value in group.tags.items() %}
-    "{{ key }}" = "{{ value }}"
+{% for key in group.tags %}
+    "{{ key }}" = "{{ group.tags[key] }}"
 {% endfor %}
   }
 {% endif %}

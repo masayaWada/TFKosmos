@@ -5,8 +5,8 @@ resource "aws_iam_role" "{{ resource_name }}" {
   assume_role_policy = jsonencode({{ role.assume_role_policy_document }})
 {% if role.tags %}
   tags = {
-{% for key, value in role.tags.items() %}
-    "{{ key }}" = "{{ value }}"
+{% for key in role.tags %}
+    "{{ key }}" = "{{ role.tags[key] }}"
 {% endfor %}
   }
 {% endif %}

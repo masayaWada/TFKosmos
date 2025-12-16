@@ -35,20 +35,42 @@ pub fn router() -> Router {
 struct GenerateTerraformRequest {
     scan_id: String,
     config: crate::models::GenerationConfig,
-    selected_resources: std::collections::HashMap<String, Vec<serde_json::Value>>,
+    #[serde(default)]
+    selected_resources: std::collections::HashMap<String, serde_json::Value>,
 }
 
 async fn generate_terraform(
     Json(request): Json<GenerateTerraformRequest>,
 ) -> Result<Json<GenerationResponse>, (StatusCode, Json<Value>)> {
+    println!("[API] Received generation request for scan_id: {}", request.scan_id);
+    println!("[API] Config: {:?}", request.config);
+    println!("[API] Selected resources: {:?}", request.selected_resources);
+    
+    // Convert selected_resources from HashMap<String, Value> to HashMap<String, Vec<Value>>
+    // Value can be either an array of strings (IDs) or an array of objects
+    let mut selected_resources_converted: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
+    for (resource_type, value) in request.selected_resources {
+        if let Some(array) = value.as_array() {
+            selected_resources_converted.insert(resource_type, array.clone());
+        } else if let Some(id_str) = value.as_str() {
+            // Single string ID
+            selected_resources_converted.insert(resource_type, vec![Value::String(id_str.to_string())]);
+        }
+    }
+    
+    println!("[API] Converted selected resources: {:?}", selected_resources_converted);
+    
     match GenerationService::generate_terraform(
         &request.scan_id,
         request.config,
-        request.selected_resources,
+        selected_resources_converted,
     )
     .await
     {
         Ok(result) => {
+            println!("[API] Generation successful. Generation ID: {}, Files: {:?}", 
+                     result.generation_id, result.files);
+            
             // Store result in cache
             let cache_entry = GenerationCacheEntry {
                 output_path: result.output_path.clone(),
@@ -61,10 +83,25 @@ async fn generate_terraform(
 
             Ok(Json(result))
         }
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "detail": e.to_string() })),
-        )),
+        Err(e) => {
+            let error_msg = e.to_string();
+            eprintln!("[API] Generation failed: {}", error_msg);
+            
+            // Print error chain for debugging
+            let mut error_chain = Vec::new();
+            let mut current_error: &dyn std::error::Error = e.as_ref();
+            error_chain.push(current_error.to_string());
+            while let Some(source) = current_error.source() {
+                error_chain.push(source.to_string());
+                current_error = source;
+            }
+            eprintln!("[API] Error chain: {:?}", error_chain);
+            
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "detail": error_msg })),
+            ))
+        }
     }
 }
 

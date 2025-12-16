@@ -1,0 +1,14 @@
+{
+  "name": "tfkosmos",
+  "version": "0.1.0",
+  "description": "TFKosmos - Terraform Code Generator",
+  "private": true,
+  "scripts": {
+    "dev": "cd deployment && npm run dev",
+    "build": "cd deployment && npm run build",
+    "tauri:dev": "cd deployment && npm run tauri:dev",
+    "tauri:build": "cd deployment && npm run tauri:build",
+    "tauri": "cd deployment && npm run tauri",
+    "clean": "cd deployment && npm run clean"
+  }
+}

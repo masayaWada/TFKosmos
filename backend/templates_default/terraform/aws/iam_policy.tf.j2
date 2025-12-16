@@ -6,8 +6,8 @@ resource "aws_iam_policy" "{{ resource_name }}" {
   policy = jsonencode({{ policy.policy_document }})
 {% if policy.tags %}
   tags = {
-{% for key, value in policy.tags.items() %}
-    "{{ key }}" = "{{ value }}"
+{% for key in policy.tags %}
+    "{{ key }}" = "{{ policy.tags[key] }}"
 {% endfor %}
   }
 {% endif %}

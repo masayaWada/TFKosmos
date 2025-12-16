@@ -4,9 +4,12 @@
   "version": "0.1.0",
   "identifier": "com.tfkosmos.app",
   "build": {
-    "beforeDevCommand": "cd ../frontend && npm run dev",
-    "beforeBuildCommand": "cd ../frontend && npm run build",
-    "devUrl": "http://localhost:5173"
+    "beforeDevCommand": {
+      "script": "npm run dev",
+      "cwd": "../../frontend"
+    },
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../../frontend/dist"
   },
   "app": {
     "windows": [

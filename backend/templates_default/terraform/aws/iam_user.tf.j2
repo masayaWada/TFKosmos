@@ -3,8 +3,8 @@ resource "aws_iam_user" "{{ resource_name }}" {
   path = "{{ user.path }}"
 {% if user.tags %}
   tags = {
-{% for key, value in user.tags.items() %}
-    "{{ key }}" = "{{ value }}"
+{% for key in user.tags %}
+    "{{ key }}" = "{{ user.tags[key] }}"
 {% endfor %}
   }
 {% endif %}

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { generateApi, GenerationConfig } from "../api/generate";
-import { resourcesApi } from "../api/resources";
 import GenerationConfigForm from "../components/generate/GenerationConfigForm";
 import CodePreview from "../components/generate/CodePreview";
 import LoadingSpinner from "../components/common/LoadingSpinner";
@@ -10,7 +9,6 @@ import SuccessMessage from "../components/common/SuccessMessage";
 
 export default function GeneratePage() {
   const { scanId } = useParams<{ scanId: string }>();
-  const navigate = useNavigate();
   const [config, setConfig] = useState<GenerationConfig>({
     output_path: "./terraform-output",
     file_split_rule: "by_resource_type",
@@ -33,8 +31,41 @@ export default function GeneratePage() {
   }, [scanId]);
 
   const loadSelectedResources = async () => {
-    // 実際の実装では、リソース選択状態を取得する必要があります
-    // ここでは簡易的に実装しています
+    if (!scanId) return;
+    try {
+      const { resourcesApi } = await import("../api/resources");
+      const result = await resourcesApi.getSelectedResources(scanId);
+      if (result.selections) {
+        // Convert Value[] to string[] (IDs)
+        const selections: Record<string, string[]> = {};
+        for (const [key, value] of Object.entries(result.selections)) {
+          if (Array.isArray(value)) {
+            selections[key] = value.map((v: any) => {
+              // If it's a string, use it directly; if it's an object, extract ID
+              if (typeof v === "string") {
+                return v;
+              } else if (v && typeof v === "object") {
+                // Try to get ID from common fields
+                return (
+                  v.user_name ||
+                  v.group_name ||
+                  v.role_name ||
+                  v.arn ||
+                  v.id ||
+                  JSON.stringify(v)
+                );
+              }
+              return String(v);
+            });
+          }
+        }
+        setSelectedResources(selections);
+        console.log("Loaded selected resources:", selections);
+      }
+    } catch (err) {
+      console.error("Failed to load selected resources:", err);
+      // Ignore errors - use empty selection
+    }
   };
 
   const handleGenerate = async () => {
@@ -44,6 +75,21 @@ export default function GeneratePage() {
     setSuccess(null);
 
     try {
+      // バックエンドサーバーが起動しているか確認
+      try {
+        await fetch("http://localhost:8000/health");
+      } catch (healthError) {
+        setError(
+          "バックエンドサーバーに接続できません。サーバーが起動しているか確認してください。\n" +
+            "エラー: " +
+            (healthError instanceof Error
+              ? healthError.message
+              : String(healthError))
+        );
+        setLoading(false);
+        return;
+      }
+
       const result = await generateApi.generate(
         scanId,
         config,
@@ -52,9 +98,26 @@ export default function GeneratePage() {
       setGenerationResult(result);
       setSuccess("Terraformコードの生成が完了しました");
     } catch (err: any) {
-      setError(
-        err.response?.data?.detail || err.message || "生成に失敗しました"
-      );
+      console.error("Generation error:", err);
+      let errorMessage = "生成に失敗しました";
+
+      if (err.response) {
+        // HTTPエラーレスポンス
+        const detail = err.response.data?.detail;
+        if (detail) {
+          errorMessage = detail;
+        } else {
+          errorMessage = `HTTP ${err.response.status}: ${err.response.statusText}`;
+        }
+      } else if (err.request) {
+        // リクエストは送信されたが、レスポンスが返ってこなかった
+        errorMessage =
+          "バックエンドサーバーに接続できません。サーバーが起動しているか確認してください。";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -64,6 +127,33 @@ export default function GeneratePage() {
     if (!generationResult?.generation_id) return;
     try {
       const blob = await generateApi.download(generationResult.generation_id);
+
+      // Check if blob is empty
+      if (blob.size === 0) {
+        setError(
+          "ダウンロードされたZIPファイルが空です。生成されたファイルが存在しない可能性があります。"
+        );
+        return;
+      }
+
+      // Check if blob is actually a ZIP file (check first bytes)
+      const arrayBuffer = await blob.slice(0, 4).arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      // ZIP files start with "PK" (0x50 0x4B)
+      if (uint8Array[0] !== 0x50 || uint8Array[1] !== 0x4b) {
+        // Might be an error JSON response, try to parse it
+        const text = await blob.text();
+        try {
+          const errorData = JSON.parse(text);
+          setError(errorData.detail || "ダウンロードに失敗しました");
+        } catch {
+          setError(
+            "ダウンロードされたファイルが有効なZIPファイルではありません。"
+          );
+        }
+        return;
+      }
+
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -72,12 +162,29 @@ export default function GeneratePage() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      setSuccess("ZIPファイルのダウンロードが完了しました");
     } catch (err: any) {
-      setError(
-        err.response?.data?.detail ||
-          err.message ||
-          "ダウンロードに失敗しました"
-      );
+      // Handle different error types
+      if (err.response) {
+        // Try to parse error response as JSON
+        if (err.response.data instanceof Blob) {
+          const text = await err.response.data.text();
+          try {
+            const errorData = JSON.parse(text);
+            setError(errorData.detail || "ダウンロードに失敗しました");
+          } catch {
+            setError("ダウンロードに失敗しました");
+          }
+        } else {
+          setError(
+            err.response?.data?.detail ||
+              err.message ||
+              "ダウンロードに失敗しました"
+          );
+        }
+      } else {
+        setError(err.message || "ダウンロードに失敗しました");
+      }
     }
   };
 
