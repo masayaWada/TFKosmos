@@ -11,9 +11,11 @@ use crate::models::GenerationConfig;
 pub struct TerraformGenerator;
 
 // Resource type to template file mapping
+#[allow(dead_code)]
 struct ResourceTemplate {
     resource_type: &'static str,
     template_path: &'static str,
+    /// プロバイダー識別子（将来の拡張用）
     provider: &'static str,
 }
 

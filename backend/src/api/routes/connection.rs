@@ -32,7 +32,9 @@ struct AwsLoginRequest {
 
 #[derive(Deserialize)]
 struct AwsConnectionRequest {
+    /// プロバイダー識別子（APIリクエストの互換性のために保持）
     #[serde(default)]
+    #[allow(dead_code)]
     provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     profile: Option<String>,
@@ -117,7 +119,9 @@ async fn aws_login(
 
 #[derive(Deserialize)]
 struct AzureConnectionRequest {
+    /// プロバイダー識別子（APIリクエストの互換性のために保持）
     #[serde(default)]
+    #[allow(dead_code)]
     provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     auth_method: Option<String>,

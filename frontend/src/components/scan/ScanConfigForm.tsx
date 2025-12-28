@@ -7,13 +7,30 @@ import {
   AzureSubscription,
   AzureResourceGroup,
 } from "../../api/scan";
-import LoadingSpinner from "../common/LoadingSpinner";
 import ErrorMessage from "../common/ErrorMessage";
+import { formStyles } from "../../styles/formStyles";
+import AzureScopeSelector from "./AzureScopeSelector";
+import ScanTargetSelector from "./ScanTargetSelector";
+import ScanProgressBar from "./ScanProgressBar";
 
 interface ScanConfigFormProps {
   provider: "aws" | "azure";
   onScanComplete?: (scanId: string) => void;
 }
+
+const AWS_DEFAULT_TARGETS = {
+  users: true,
+  groups: true,
+  roles: false,
+  policies: false,
+  attachments: true,
+  cleanup: false,
+};
+
+const AZURE_DEFAULT_TARGETS = {
+  role_definitions: true,
+  role_assignments: true,
+};
 
 export default function ScanConfigForm({
   provider,
@@ -21,19 +38,7 @@ export default function ScanConfigForm({
 }: ScanConfigFormProps) {
   const navigate = useNavigate();
   const [scanTargets, setScanTargets] = useState<Record<string, boolean>>(
-    provider === "aws"
-      ? {
-          users: true,
-          groups: true,
-          roles: false,
-          policies: false,
-          attachments: true,
-          cleanup: false,
-        }
-      : {
-          role_definitions: true,
-          role_assignments: true,
-        }
+    provider === "aws" ? AWS_DEFAULT_TARGETS : AZURE_DEFAULT_TARGETS
   );
   const [namePrefix, setNamePrefix] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,9 +58,7 @@ export default function ScanConfigForm({
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState("");
   const [selectedResourceGroup, setSelectedResourceGroup] = useState("");
   const [subscriptions, setSubscriptions] = useState<AzureSubscription[]>([]);
-  const [resourceGroups, setResourceGroups] = useState<AzureResourceGroup[]>(
-    []
-  );
+  const [resourceGroups, setResourceGroups] = useState<AzureResourceGroup[]>([]);
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
   const [loadingResourceGroups, setLoadingResourceGroups] = useState(false);
   const [azureAuthSettings, setAzureAuthSettings] = useState<{
@@ -69,25 +72,12 @@ export default function ScanConfigForm({
   // Reset scan targets when provider changes
   useEffect(() => {
     setScanTargets(
-      provider === "aws"
-        ? {
-            users: true,
-            groups: true,
-            roles: false,
-            policies: false,
-            attachments: true,
-            cleanup: false,
-          }
-        : {
-            role_definitions: true,
-            role_assignments: true,
-          }
+      provider === "aws" ? AWS_DEFAULT_TARGETS : AZURE_DEFAULT_TARGETS
     );
   }, [provider]);
 
   // Load subscriptions function
   const loadSubscriptions = useCallback(async () => {
-    // localStorageに接続設定がない場合はスキップ
     const savedSettings = localStorage.getItem("azure_connection_settings");
     if (!savedSettings) {
       setError(
@@ -111,12 +101,13 @@ export default function ScanConfigForm({
           "サブスクリプションが見つかりませんでした。Azure CLIでログインしているか、認証情報が正しいか確認してください。"
         );
       } else {
-        setError(null); // 成功した場合はエラーをクリア
+        setError(null);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } }; message?: string };
       const errorMessage =
-        err.response?.data?.detail ||
-        err.message ||
+        error.response?.data?.detail ||
+        error.message ||
         "サブスクリプションの取得に失敗しました";
       setError(errorMessage);
       console.error("Failed to load subscriptions:", err);
@@ -133,14 +124,13 @@ export default function ScanConfigForm({
         try {
           const parsed = JSON.parse(savedSettings);
           setAzureAuthSettings(parsed);
-          setError(null); // 接続設定が見つかった場合はエラーをクリア
+          setError(null);
         } catch (e) {
           console.error("Failed to parse Azure connection settings:", e);
           setError("接続設定の読み込みに失敗しました。");
           setAzureAuthSettings({});
         }
       } else {
-        // localStorageにデータがない場合でも、空のオブジェクトを設定して試行（az_loginの場合）
         setAzureAuthSettings({});
         setError(
           "接続設定が見つかりません。接続設定ページで接続テストを実行してください。"
@@ -184,7 +174,6 @@ export default function ScanConfigForm({
       setSubscriptionId(selectedSubscriptionId);
       setScopeValue(selectedResourceGroup);
     } else {
-      // management_group or other
       setSubscriptionId(selectedSubscriptionId);
     }
   }, [scopeType, selectedSubscriptionId, selectedResourceGroup]);
@@ -200,10 +189,11 @@ export default function ScanConfigForm({
         azureAuthSettings?.client_secret
       );
       setResourceGroups(result.resource_groups);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } }; message?: string };
       setError(
-        err.response?.data?.detail ||
-          err.message ||
+        error.response?.data?.detail ||
+          error.message ||
           "リソースグループの取得に失敗しました"
       );
     } finally {
@@ -234,7 +224,6 @@ export default function ScanConfigForm({
         if (scopeValue) config.scope_value = scopeValue;
       }
 
-      // Start scan and get scan_id immediately
       const result =
         provider === "aws"
           ? await scanApi.scanAws(config)
@@ -243,7 +232,6 @@ export default function ScanConfigForm({
       const currentScanId = result.scan_id;
       setScanId(currentScanId);
 
-      // Poll for progress while scan is running
       const progressInterval = setInterval(async () => {
         try {
           const status = await scanApi.getStatus(currentScanId);
@@ -265,13 +253,14 @@ export default function ScanConfigForm({
             setError(status.message || "スキャンに失敗しました");
             setLoading(false);
           }
-        } catch (err) {
+        } catch {
           // Ignore errors during polling
         }
-      }, 500); // Poll every 500ms
-    } catch (err: any) {
+      }, 500);
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } }; message?: string };
       setError(
-        err.response?.data?.detail || err.message || "スキャンに失敗しました"
+        error.response?.data?.detail || error.message || "スキャンに失敗しました"
       );
       setLoading(false);
     }
@@ -282,389 +271,57 @@ export default function ScanConfigForm({
   };
 
   return (
-    <div style={{ maxWidth: "800px" }}>
+    <div style={formStyles.container}>
       <h2>{provider === "aws" ? "AWS" : "Azure"} IAMスキャン設定</h2>
       {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
       {provider === "aws" ? (
         <>
-          <div style={{ marginBottom: "1rem" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "0.5rem",
-                fontWeight: "bold",
-              }}
-            >
-              プロファイル
-            </label>
+          <div style={formStyles.fieldGroup}>
+            <label style={formStyles.label}>プロファイル</label>
             <input
               type="text"
               value={profile}
               onChange={(e) => setProfile(e.target.value)}
               placeholder="default"
-              style={{
-                width: "100%",
-                padding: "0.5rem",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
-              }}
+              style={formStyles.input}
             />
           </div>
-          <div style={{ marginBottom: "1rem" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "0.5rem",
-                fontWeight: "bold",
-              }}
-            >
-              Assume Role ARN (オプション)
-            </label>
+          <div style={formStyles.fieldGroup}>
+            <label style={formStyles.label}>Assume Role ARN (オプション)</label>
             <input
               type="text"
               value={assumeRoleArn}
               onChange={(e) => setAssumeRoleArn(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "0.5rem",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
-              }}
+              style={formStyles.input}
             />
           </div>
         </>
       ) : (
-        <>
-          <div style={{ marginBottom: "1rem" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "0.5rem",
-                fontWeight: "bold",
-              }}
-            >
-              スコープタイプ
-            </label>
-            <select
-              value={scopeType}
-              onChange={(e) => {
-                setScopeType(e.target.value);
-                if (e.target.value !== "resource_group") {
-                  setSelectedResourceGroup("");
-                }
-              }}
-              style={{
-                width: "100%",
-                padding: "0.5rem",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
-              }}
-            >
-              <option value="subscription">Subscription</option>
-              <option value="management_group">Management Group</option>
-              <option value="resource_group">Resource Group</option>
-            </select>
-          </div>
-
-          {scopeType === "subscription" && (
-            <div style={{ marginBottom: "1rem" }}>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: "0.5rem",
-                  fontWeight: "bold",
-                }}
-              >
-                サブスクリプション
-              </label>
-              {loadingSubscriptions ? (
-                <div style={{ padding: "0.5rem", color: "#666" }}>
-                  読み込み中...
-                </div>
-              ) : (
-                <select
-                  value={selectedSubscriptionId}
-                  onChange={(e) => setSelectedSubscriptionId(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    border: "1px solid #ddd",
-                    borderRadius: "4px",
-                  }}
-                >
-                  <option value="">選択してください</option>
-                  {subscriptions.map((sub) => (
-                    <option
-                      key={sub.subscription_id}
-                      value={sub.subscription_id}
-                    >
-                      {sub.display_name} ({sub.subscription_id})
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          )}
-
-          {scopeType === "resource_group" && (
-            <>
-              <div style={{ marginBottom: "1rem" }}>
-                <label
-                  style={{
-                    display: "block",
-                    marginBottom: "0.5rem",
-                    fontWeight: "bold",
-                  }}
-                >
-                  サブスクリプション
-                </label>
-                {loadingSubscriptions ? (
-                  <div style={{ padding: "0.5rem", color: "#666" }}>
-                    読み込み中...
-                  </div>
-                ) : (
-                  <select
-                    value={selectedSubscriptionId}
-                    onChange={(e) => {
-                      setSelectedSubscriptionId(e.target.value);
-                      setSelectedResourceGroup("");
-                    }}
-                    style={{
-                      width: "100%",
-                      padding: "0.5rem",
-                      border: "1px solid #ddd",
-                      borderRadius: "4px",
-                    }}
-                  >
-                    <option value="">選択してください</option>
-                    {subscriptions.map((sub) => (
-                      <option
-                        key={sub.subscription_id}
-                        value={sub.subscription_id}
-                      >
-                        {sub.display_name} ({sub.subscription_id})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              {selectedSubscriptionId && (
-                <div style={{ marginBottom: "1rem" }}>
-                  <label
-                    style={{
-                      display: "block",
-                      marginBottom: "0.5rem",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    リソースグループ
-                  </label>
-                  {loadingResourceGroups ? (
-                    <div style={{ padding: "0.5rem", color: "#666" }}>
-                      読み込み中...
-                    </div>
-                  ) : (
-                    <select
-                      value={selectedResourceGroup}
-                      onChange={(e) => setSelectedResourceGroup(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "0.5rem",
-                        border: "1px solid #ddd",
-                        borderRadius: "4px",
-                      }}
-                    >
-                      <option value="">選択してください</option>
-                      {resourceGroups.map((rg) => (
-                        <option key={rg.name} value={rg.name}>
-                          {rg.name} ({rg.location})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {scopeType === "management_group" && (
-            <div style={{ marginBottom: "1rem" }}>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: "0.5rem",
-                  fontWeight: "bold",
-                }}
-              >
-                サブスクリプション（認証用）
-              </label>
-              {loadingSubscriptions ? (
-                <div style={{ padding: "0.5rem", color: "#666" }}>
-                  読み込み中...
-                </div>
-              ) : (
-                <select
-                  value={selectedSubscriptionId}
-                  onChange={(e) => setSelectedSubscriptionId(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    border: "1px solid #ddd",
-                    borderRadius: "4px",
-                  }}
-                >
-                  <option value="">選択してください</option>
-                  {subscriptions.map((sub) => (
-                    <option
-                      key={sub.subscription_id}
-                      value={sub.subscription_id}
-                    >
-                      {sub.display_name} ({sub.subscription_id})
-                    </option>
-                  ))}
-                </select>
-              )}
-              <div style={{ marginTop: "0.5rem" }}>
-                <label
-                  style={{
-                    display: "block",
-                    marginBottom: "0.5rem",
-                    fontWeight: "bold",
-                  }}
-                >
-                  管理グループ名
-                </label>
-                <input
-                  type="text"
-                  value={scopeValue}
-                  onChange={(e) => setScopeValue(e.target.value)}
-                  placeholder="管理グループ名を入力"
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    border: "1px solid #ddd",
-                    borderRadius: "4px",
-                  }}
-                />
-              </div>
-            </div>
-          )}
-        </>
+        <AzureScopeSelector
+          scopeType={scopeType}
+          setScopeType={setScopeType}
+          selectedSubscriptionId={selectedSubscriptionId}
+          setSelectedSubscriptionId={setSelectedSubscriptionId}
+          selectedResourceGroup={selectedResourceGroup}
+          setSelectedResourceGroup={setSelectedResourceGroup}
+          scopeValue={scopeValue}
+          setScopeValue={setScopeValue}
+          subscriptions={subscriptions}
+          resourceGroups={resourceGroups}
+          loadingSubscriptions={loadingSubscriptions}
+          loadingResourceGroups={loadingResourceGroups}
+        />
       )}
 
-      <div style={{ marginBottom: "1rem" }}>
-        <label
-          style={{
-            display: "block",
-            marginBottom: "0.5rem",
-            fontWeight: "bold",
-          }}
-        >
-          スキャン対象
-        </label>
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
-        >
-          {provider === "aws" ? (
-            <>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={scanTargets.users}
-                  onChange={() => toggleTarget("users")}
-                />
-                Users
-              </label>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={scanTargets.groups}
-                  onChange={() => toggleTarget("groups")}
-                />
-                Groups
-              </label>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={scanTargets.roles}
-                  onChange={() => toggleTarget("roles")}
-                />
-                Roles
-              </label>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={scanTargets.policies}
-                  onChange={() => toggleTarget("policies")}
-                />
-                Policies
-              </label>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={scanTargets.attachments}
-                  onChange={() => toggleTarget("attachments")}
-                />
-                Attachments
-              </label>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={scanTargets.cleanup}
-                  onChange={() => toggleTarget("cleanup")}
-                />
-                Cleanup (Access Keys, Login Profiles, MFA)
-              </label>
-            </>
-          ) : (
-            <>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={scanTargets.role_definitions}
-                  onChange={() => toggleTarget("role_definitions")}
-                />
-                Role Definitions
-              </label>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={scanTargets.role_assignments}
-                  onChange={() => toggleTarget("role_assignments")}
-                />
-                Role Assignments
-              </label>
-            </>
-          )}
-        </div>
-      </div>
+      <ScanTargetSelector
+        provider={provider}
+        scanTargets={scanTargets}
+        toggleTarget={toggleTarget}
+      />
 
-      <div style={{ marginBottom: "1rem" }}>
-        <label
-          style={{
-            display: "block",
-            marginBottom: "0.5rem",
-            fontWeight: "bold",
-          }}
-        >
+      <div style={formStyles.fieldGroup}>
+        <label style={formStyles.label}>
           名前プレフィックスフィルタ (オプション)
         </label>
         <input
@@ -672,12 +329,7 @@ export default function ScanConfigForm({
           value={namePrefix}
           onChange={(e) => setNamePrefix(e.target.value)}
           placeholder="prod-"
-          style={{
-            width: "100%",
-            padding: "0.5rem",
-            border: "1px solid #ddd",
-            borderRadius: "4px",
-          }}
+          style={formStyles.input}
         />
       </div>
 
@@ -685,63 +337,16 @@ export default function ScanConfigForm({
         onClick={handleScan}
         disabled={loading}
         style={{
-          padding: "0.75rem 1.5rem",
-          backgroundColor: "#28a745",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
-          cursor: loading ? "not-allowed" : "pointer",
-          opacity: loading ? 0.6 : 1,
+          ...formStyles.button,
+          ...(loading ? formStyles.buttonDisabled : {}),
           marginBottom: loading ? "1rem" : "0",
         }}
       >
         {loading ? "スキャン実行中..." : "スキャン実行"}
       </button>
+
       {loading && (
-        <div style={{ marginTop: "1rem" }}>
-          <div
-            style={{
-              width: "100%",
-              backgroundColor: "#e0e0e0",
-              borderRadius: "4px",
-              height: "24px",
-              marginBottom: "0.5rem",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                width: `${progress}%`,
-                backgroundColor: "#28a745",
-                height: "100%",
-                transition: "width 0.3s ease",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "white",
-                fontSize: "12px",
-                fontWeight: "bold",
-              }}
-            >
-              {progress > 10 ? `${progress}%` : ""}
-            </div>
-          </div>
-          <div
-            style={{
-              textAlign: "center",
-              color: "#666",
-              fontSize: "14px",
-              marginTop: "0.5rem",
-            }}
-          >
-            {progressMessage || "スキャン中..."}
-          </div>
-          {progress < 100 && (
-            <div style={{ textAlign: "center", marginTop: "0.5rem" }}>
-              <LoadingSpinner />
-            </div>
-          )}
-        </div>
+        <ScanProgressBar progress={progress} message={progressMessage} />
       )}
     </div>
   );
