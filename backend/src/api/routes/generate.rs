@@ -16,6 +16,7 @@ use crate::services::generation_service::GenerationService;
 type GenerationCache = Arc<RwLock<std::collections::HashMap<String, GenerationCacheEntry>>>;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct GenerationCacheEntry {
     output_path: String,
     files: Vec<String>,

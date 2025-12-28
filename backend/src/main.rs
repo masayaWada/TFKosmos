@@ -1,4 +1,3 @@
-use axum::http::HeaderValue;
 use axum::{http::header, http::Method, response::Json, routing::get, Router};
 use serde_json::{json, Value};
 use tower::ServiceBuilder;

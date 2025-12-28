@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::process::Command;
 use tokio::sync::Semaphore;
+use tracing::{debug, info, warn};
 
 use crate::models::ScanConfig;
 
@@ -18,6 +19,41 @@ pub struct AzureIamScanner {
 impl AzureIamScanner {
     pub async fn new(config: ScanConfig) -> Result<Self> {
         Ok(Self { config })
+    }
+
+    /// Role Definitionをフロントエンド形式に変換（表示名なし）
+    fn transform_role_definition_basic(rd: &Value) -> Value {
+        let mut transformed = serde_json::Map::new();
+        if let Some(id) = rd.get("id") {
+            transformed.insert("role_definition_id".to_string(), id.clone());
+        }
+        if let Some(name) = rd.get("name").or_else(|| rd.get("roleName")) {
+            transformed.insert("role_name".to_string(), name.clone());
+        }
+        if let Some(desc) = rd.get("description") {
+            transformed.insert("description".to_string(), desc.clone());
+        }
+        if let Some(role_type) = rd.get("type") {
+            transformed.insert("role_type".to_string(), role_type.clone());
+        }
+        // scopeをidから抽出
+        if let Some(id) = rd.get("id") {
+            if let Some(id_str) = id.as_str() {
+                if let Some(scope_end) =
+                    id_str.rfind("/providers/Microsoft.Authorization/roleDefinitions")
+                {
+                    let scope = &id_str[..scope_end];
+                    transformed.insert("scope".to_string(), Value::String(scope.to_string()));
+                }
+            }
+        }
+        // 元のデータも保持
+        for (key, value) in rd.as_object().unwrap_or(&serde_json::Map::new()) {
+            if !transformed.contains_key(key) {
+                transformed.insert(key.clone(), value.clone());
+            }
+        }
+        Value::Object(transformed)
     }
 
     /// Azure CLIコマンドを実行してJSONを取得
@@ -109,7 +145,7 @@ impl AzureIamScanner {
         }
 
         let start_time = std::time::Instant::now();
-        println!("[SCAN] Role Definitionsスキャンを開始");
+        info!("Role Definitionsスキャンを開始");
 
         let mut args: Vec<String> = vec![
             "role".to_string(),
@@ -127,12 +163,9 @@ impl AzureIamScanner {
         let full_args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
         let az_start = std::time::Instant::now();
-        println!("[SCAN] Azure CLIコマンド実行開始: az role definition list");
+        debug!("Azure CLIコマンド実行開始: az role definition list");
         let json = Self::execute_az_command(&full_args).await?;
-        println!(
-            "[SCAN] Azure CLIコマンド完了: {}ms",
-            az_start.elapsed().as_millis()
-        );
+        debug!(elapsed_ms = az_start.elapsed().as_millis(), "Azure CLIコマンド完了");
 
         // まず、すべてのrole definitionを収集
         let filter_start = std::time::Instant::now();
@@ -156,11 +189,7 @@ impl AzureIamScanner {
                 Some(rd.clone())
             })
             .collect();
-        println!(
-            "[SCAN] フィルタリング完了: {}件, {}ms",
-            role_definitions_vec.len(),
-            filter_start.elapsed().as_millis()
-        );
+        debug!(count = role_definitions_vec.len(), elapsed_ms = filter_start.elapsed().as_millis(), "フィルタリング完了");
 
         // ユニークなrole definition IDを収集して並列で表示名を取得
         let unique_start = std::time::Instant::now();
@@ -175,71 +204,26 @@ impl AzureIamScanner {
                 }
             }
         }
-        println!(
-            "[SCAN] ユニークなRole Definition ID収集完了: {}件, {}ms",
-            unique_role_def_ids.len(),
-            unique_start.elapsed().as_millis()
-        );
+        debug!(count = unique_role_def_ids.len(), elapsed_ms = unique_start.elapsed().as_millis(), "ユニークなRole Definition ID収集完了");
 
         // 並列で表示名を取得（同時実行数を制限）
         let api_start = std::time::Instant::now();
-        println!(
-            "[SCAN] Role Definition表示名の並列取得開始: {}件",
-            unique_role_def_ids.len()
-        );
+        debug!(count = unique_role_def_ids.len(), "Role Definition表示名の並列取得開始");
 
         // トークンを事前に取得してキャッシュ
         let token_start = std::time::Instant::now();
         let scope = "https://management.azure.com/.default";
         let token = match Self::get_auth_token(scope).await {
             Some(token) => {
-                println!(
-                    "[SCAN] トークン取得完了: {}ms",
-                    token_start.elapsed().as_millis()
-                );
+                debug!(elapsed_ms = token_start.elapsed().as_millis(), "トークン取得完了");
                 token
             }
             None => {
-                println!("[SCAN] トークン取得失敗、フォールバック処理に移行");
-                // トークン取得失敗時はフォールバック
-                let mut role_definitions = Vec::new();
-                for rd in role_definitions_vec {
-                    let mut transformed = serde_json::Map::new();
-                    if let Some(id) = rd.get("id") {
-                        transformed.insert("role_definition_id".to_string(), id.clone());
-                    }
-                    if let Some(name) = rd.get("name").or_else(|| rd.get("roleName")) {
-                        transformed.insert("role_name".to_string(), name.clone());
-                    }
-                    if let Some(desc) = rd.get("description") {
-                        transformed.insert("description".to_string(), desc.clone());
-                    }
-                    if let Some(role_type) = rd.get("type") {
-                        transformed.insert("role_type".to_string(), role_type.clone());
-                    }
-                    if let Some(id) = rd.get("id") {
-                        if let Some(id_str) = id.as_str() {
-                            if let Some(scope_end) =
-                                id_str.rfind("/providers/Microsoft.Authorization/roleDefinitions")
-                            {
-                                let scope = &id_str[..scope_end];
-                                transformed
-                                    .insert("scope".to_string(), Value::String(scope.to_string()));
-                            }
-                        }
-                    }
-                    for (key, value) in rd.as_object().unwrap_or(&serde_json::Map::new()) {
-                        if !transformed.contains_key(key) {
-                            transformed.insert(key.clone(), value.clone());
-                        }
-                    }
-                    role_definitions.push(Value::Object(transformed));
-                }
-                println!(
-                    "[SCAN] Role Definitionsスキャン完了: {}件, 合計{}ms",
-                    role_definitions.len(),
-                    start_time.elapsed().as_millis()
-                );
+                warn!("トークン取得失敗、フォールバック処理に移行");
+                let role_definitions: Vec<Value> = role_definitions_vec.iter()
+                    .map(Self::transform_role_definition_basic)
+                    .collect();
+                info!(count = role_definitions.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Definitionsスキャン完了");
                 return Ok(role_definitions);
             }
         };
@@ -248,46 +232,11 @@ impl AzureIamScanner {
         let http_client = match HttpClient::builder().build() {
             Ok(client) => client,
             Err(_) => {
-                println!("[SCAN] HTTPクライアント作成失敗、フォールバック処理に移行");
-                // HTTPクライアント作成失敗時はフォールバック
-                let mut role_definitions = Vec::new();
-                for rd in role_definitions_vec {
-                    let mut transformed = serde_json::Map::new();
-                    if let Some(id) = rd.get("id") {
-                        transformed.insert("role_definition_id".to_string(), id.clone());
-                    }
-                    if let Some(name) = rd.get("name").or_else(|| rd.get("roleName")) {
-                        transformed.insert("role_name".to_string(), name.clone());
-                    }
-                    if let Some(desc) = rd.get("description") {
-                        transformed.insert("description".to_string(), desc.clone());
-                    }
-                    if let Some(role_type) = rd.get("type") {
-                        transformed.insert("role_type".to_string(), role_type.clone());
-                    }
-                    if let Some(id) = rd.get("id") {
-                        if let Some(id_str) = id.as_str() {
-                            if let Some(scope_end) =
-                                id_str.rfind("/providers/Microsoft.Authorization/roleDefinitions")
-                            {
-                                let scope = &id_str[..scope_end];
-                                transformed
-                                    .insert("scope".to_string(), Value::String(scope.to_string()));
-                            }
-                        }
-                    }
-                    for (key, value) in rd.as_object().unwrap_or(&serde_json::Map::new()) {
-                        if !transformed.contains_key(key) {
-                            transformed.insert(key.clone(), value.clone());
-                        }
-                    }
-                    role_definitions.push(Value::Object(transformed));
-                }
-                println!(
-                    "[SCAN] Role Definitionsスキャン完了: {}件, 合計{}ms",
-                    role_definitions.len(),
-                    start_time.elapsed().as_millis()
-                );
+                warn!("HTTPクライアント作成失敗、フォールバック処理に移行");
+                let role_definitions: Vec<Value> = role_definitions_vec.iter()
+                    .map(Self::transform_role_definition_basic)
+                    .collect();
+                info!(count = role_definitions.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Definitionsスキャン完了");
                 return Ok(role_definitions);
             }
         };
@@ -321,10 +270,7 @@ impl AzureIamScanner {
         for (rid, name) in display_names {
             role_def_id_to_name.insert(rid, name);
         }
-        println!(
-            "[SCAN] Role Definition表示名取得完了: {}ms",
-            api_start.elapsed().as_millis()
-        );
+        debug!(elapsed_ms = api_start.elapsed().as_millis(), "Role Definition表示名取得完了");
 
         // 各role definitionに対して表示名を設定
         let mut role_definitions = Vec::new();
@@ -412,11 +358,7 @@ impl AzureIamScanner {
             role_definitions.push(Value::Object(transformed));
         }
 
-        println!(
-            "[SCAN] Role Definitionsスキャン完了: {}件, 合計{}ms",
-            role_definitions.len(),
-            start_time.elapsed().as_millis()
-        );
+        info!(count = role_definitions.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Definitionsスキャン完了");
         Ok(role_definitions)
     }
 
@@ -477,160 +419,6 @@ impl AzureIamScanner {
         } else {
             None
         }
-    }
-
-    /// Principal IDから表示名を取得（Microsoft Graph APIを使用、後方互換性のため）
-    async fn get_principal_display_name(
-        principal_id: &str,
-        principal_type: Option<&str>,
-    ) -> Option<String> {
-        let scope = "https://graph.microsoft.com/.default";
-        let token = match Self::get_auth_token(scope).await {
-            Some(token) => token,
-            None => return None,
-        };
-        let client = match HttpClient::builder().build() {
-            Ok(client) => client,
-            Err(_) => return None,
-        };
-        Self::get_principal_display_name_with_token(principal_id, principal_type, &token, &client)
-            .await
-    }
-
-    /// Role Definition IDから表示名を取得（Azure Management APIを使用）
-    async fn get_role_display_name(
-        role_definition_id: &str,
-        subscription_id: Option<&str>,
-    ) -> Option<String> {
-        let api_start = std::time::Instant::now();
-
-        // roleDefinitionIdの形式: /subscriptions/{subId}/providers/Microsoft.Authorization/roleDefinitions/{roleId}
-        // または単にroleIdのみの場合もある
-
-        let (sub_id, role_id) = if role_definition_id.starts_with("/subscriptions/") {
-            // フルパスの場合
-            if let Some(role_id_start) = role_definition_id.rfind('/') {
-                let role_id = &role_definition_id[role_id_start + 1..];
-                let sub_id_start =
-                    role_definition_id.find("/subscriptions/").unwrap() + "/subscriptions/".len();
-                let sub_id_end = role_definition_id[sub_id_start..]
-                    .find('/')
-                    .unwrap_or(role_definition_id.len() - sub_id_start);
-                let sub_id = &role_definition_id[sub_id_start..sub_id_start + sub_id_end];
-                (Some(sub_id), role_id)
-            } else {
-                return None;
-            }
-        } else {
-            // roleIdのみの場合
-            (subscription_id, role_definition_id)
-        };
-
-        let sub_id = match sub_id {
-            Some(id) => id,
-            None => return None,
-        };
-
-        // Azure Management APIのスコープ
-        let scope = "https://management.azure.com/.default";
-        let token_start = std::time::Instant::now();
-        let token = match Self::get_auth_token(scope).await {
-            Some(token) => token,
-            None => {
-                println!(
-                    "[API] Role表示名取得失敗: トークン取得エラー ({}ms)",
-                    token_start.elapsed().as_millis()
-                );
-                return None;
-            }
-        };
-        if token_start.elapsed().as_millis() > 100 {
-            println!(
-                "[API] トークン取得に時間がかかりました: {}ms",
-                token_start.elapsed().as_millis()
-            );
-        }
-
-        // HTTPクライアントを作成
-        let client = match HttpClient::builder().build() {
-            Ok(client) => client,
-            Err(_) => return None,
-        };
-
-        // Azure Management APIのエンドポイント
-        let endpoint = format!(
-            "https://management.azure.com/subscriptions/{}/providers/Microsoft.Authorization/roleDefinitions/{}?api-version=2022-04-01",
-            sub_id, role_id
-        );
-
-        // APIリクエストを送信（日本語ロケールを指定）
-        let request_start = std::time::Instant::now();
-        let response = match client
-            .get(&endpoint)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Accept-Language", "ja-JP")
-            .send()
-            .await
-        {
-            Ok(resp) => resp,
-            Err(e) => {
-                println!(
-                    "[API] Role表示名取得失敗: リクエストエラー {} ({}ms)",
-                    e,
-                    request_start.elapsed().as_millis()
-                );
-                return None;
-            }
-        };
-        if request_start.elapsed().as_millis() > 500 {
-            println!(
-                "[API] Role表示名取得に時間がかかりました: {}ms (role_id: {})",
-                request_start.elapsed().as_millis(),
-                role_id
-            );
-        }
-
-        // レスポンスをJSONとして解析
-        let json: Value = match response.json().await {
-            Ok(json) => json,
-            Err(_) => return None,
-        };
-
-        // 表示名を取得（properties.displayNameが存在する場合はそれを使用、存在しない場合はproperties.roleNameを使用）
-        let properties = json.get("properties");
-        let result = if let Some(props) = properties {
-            // displayNameが存在する場合はそれを使用（ローカライズされた名前、日本語）
-            if let Some(display_name_localized) = props.get("displayName") {
-                if let Some(name) = display_name_localized.as_str() {
-                    if !name.is_empty() {
-                        Some(name.to_string())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                // displayNameが存在しない、または空の場合はroleNameを使用（英語名）
-                if let Some(role_name) = props.get("roleName") {
-                    role_name.as_str().map(|s| s.to_string())
-                } else {
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        if api_start.elapsed().as_millis() > 1000 {
-            println!(
-                "[API] Role表示名取得完了（遅延）: {}ms (role_id: {})",
-                api_start.elapsed().as_millis(),
-                role_id
-            );
-        }
-
-        result
     }
 
     /// Role Definition IDから表示名を取得（Azure Management APIを使用、トークンとHTTPクライアントを再利用）
@@ -725,7 +513,7 @@ impl AzureIamScanner {
         }
 
         let start_time = std::time::Instant::now();
-        println!("[SCAN] Role Assignmentsスキャンを開始");
+        info!("Role Assignmentsスキャンを開始");
 
         let mut args: Vec<String> = vec![
             "role".to_string(),
@@ -743,12 +531,9 @@ impl AzureIamScanner {
         let full_args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
         let az_start = std::time::Instant::now();
-        println!("[SCAN] Azure CLIコマンド実行開始: az role assignment list");
+        debug!("Azure CLIコマンド実行開始: az role assignment list");
         let json = Self::execute_az_command(&full_args).await?;
-        println!(
-            "[SCAN] Azure CLIコマンド完了: {}ms",
-            az_start.elapsed().as_millis()
-        );
+        debug!(elapsed_ms = az_start.elapsed().as_millis(), "Azure CLIコマンド完了");
 
         // まず、すべてのrole assignmentを収集
         let filter_start = std::time::Instant::now();
@@ -773,11 +558,7 @@ impl AzureIamScanner {
                 Some(ra.clone())
             })
             .collect();
-        println!(
-            "[SCAN] フィルタリング完了: {}件, {}ms",
-            role_assignments_vec.len(),
-            filter_start.elapsed().as_millis()
-        );
+        debug!(count = role_assignments_vec.len(), elapsed_ms = filter_start.elapsed().as_millis(), "フィルタリング完了");
 
         // ユニークなrole definition IDとprincipal IDを収集
         let unique_start = std::time::Instant::now();
@@ -808,19 +589,19 @@ impl AzureIamScanner {
                 }
             }
         }
-        println!(
-            "[SCAN] ユニークなID収集完了: Role Definition {}件, Principal {}件, {}ms",
-            unique_role_def_ids.len(),
-            unique_principal_ids.len(),
-            unique_start.elapsed().as_millis()
+        debug!(
+            role_def_count = unique_role_def_ids.len(),
+            principal_count = unique_principal_ids.len(),
+            elapsed_ms = unique_start.elapsed().as_millis(),
+            "ユニークなID収集完了"
         );
 
         // 並列で表示名を取得（同時実行数を制限）
         let api_start = std::time::Instant::now();
-        println!(
-            "[SCAN] 表示名の並列取得開始: Role Definition {}件, Principal {}件",
-            unique_role_def_ids.len(),
-            unique_principal_ids.len()
+        debug!(
+            role_def_count = unique_role_def_ids.len(),
+            principal_count = unique_principal_ids.len(),
+            "表示名の並列取得開始"
         );
 
         // トークンを事前に取得してキャッシュ（Management API用）
@@ -828,14 +609,11 @@ impl AzureIamScanner {
         let mgmt_scope = "https://management.azure.com/.default";
         let mgmt_token = match Self::get_auth_token(mgmt_scope).await {
             Some(token) => {
-                println!(
-                    "[SCAN] Management APIトークン取得完了: {}ms",
-                    mgmt_token_start.elapsed().as_millis()
-                );
+                debug!(elapsed_ms = mgmt_token_start.elapsed().as_millis(), "Management APIトークン取得完了");
                 token
             }
             None => {
-                println!("[SCAN] Management APIトークン取得失敗");
+                warn!("Management APIトークン取得失敗");
                 String::new()
             }
         };
@@ -845,14 +623,11 @@ impl AzureIamScanner {
         let graph_scope = "https://graph.microsoft.com/.default";
         let graph_token = match Self::get_auth_token(graph_scope).await {
             Some(token) => {
-                println!(
-                    "[SCAN] Graph APIトークン取得完了: {}ms",
-                    graph_token_start.elapsed().as_millis()
-                );
+                debug!(elapsed_ms = graph_token_start.elapsed().as_millis(), "Graph APIトークン取得完了");
                 token
             }
             None => {
-                println!("[SCAN] Graph APIトークン取得失敗");
+                warn!("Graph APIトークン取得失敗");
                 String::new()
             }
         };
@@ -861,7 +636,7 @@ impl AzureIamScanner {
         let http_client = match HttpClient::builder().build() {
             Ok(client) => client,
             Err(_) => {
-                println!("[SCAN] HTTPクライアント作成失敗");
+                warn!("HTTPクライアント作成失敗");
                 return Ok(Vec::new());
             }
         };
@@ -927,10 +702,7 @@ impl AzureIamScanner {
         for (key, name) in principal_results {
             principal_id_to_name.insert(key, name);
         }
-        println!(
-            "[SCAN] 表示名取得完了: {}ms",
-            api_start.elapsed().as_millis()
-        );
+        debug!(elapsed_ms = api_start.elapsed().as_millis(), "表示名取得完了");
 
         // 各role assignmentに対して表示名を設定
         let mut transformed_assignments = Vec::new();
@@ -1028,11 +800,7 @@ impl AzureIamScanner {
             transformed_assignments.push(Value::Object(transformed));
         }
 
-        println!(
-            "[SCAN] Role Assignmentsスキャン完了: {}件, 合計{}ms",
-            transformed_assignments.len(),
-            start_time.elapsed().as_millis()
-        );
+        info!(count = transformed_assignments.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Assignmentsスキャン完了");
         Ok(transformed_assignments)
     }
 
@@ -1041,7 +809,7 @@ impl AzureIamScanner {
         progress_callback: Box<dyn Fn(u32, String) + Send + Sync>,
     ) -> Result<Value> {
         let scan_start = std::time::Instant::now();
-        println!("[SCAN] ========== スキャン開始 ==========");
+        info!("Azure IAMスキャン開始");
         progress_callback(0, "Azure IAMスキャンを開始しています...".to_string());
 
         let mut results = serde_json::Map::new();
@@ -1081,10 +849,7 @@ impl AzureIamScanner {
             format!("Role Assignmentsのスキャン完了: {}件", role_assign_count),
         );
 
-        println!(
-            "[SCAN] ========== スキャン完了: 合計{}ms ==========",
-            scan_start.elapsed().as_millis()
-        );
+        info!(elapsed_ms = scan_start.elapsed().as_millis(), "Azure IAMスキャン完了");
         progress_callback(
             100,
             format!(

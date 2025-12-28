@@ -2,6 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use aws_sdk_iam::Client as IamClient;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use tracing::{debug, info};
 
 use crate::infra::aws::client_factory::AwsClientFactory;
 use crate::models::ScanConfig;
@@ -35,7 +36,7 @@ impl AwsIamScanner {
         progress_callback: Box<dyn Fn(u32, String) + Send + Sync>,
     ) -> Result<Value> {
         let start_time = std::time::Instant::now();
-        println!("[SCAN] AWS IAMスキャンを開始");
+        info!("AWS IAMスキャンを開始");
         progress_callback(0, "AWS IAMスキャンを開始しています...".to_string());
 
         let mut results = serde_json::Map::new();
@@ -54,7 +55,7 @@ impl AwsIamScanner {
 
         // Users
         if scan_targets.get("users").copied().unwrap_or(false) {
-            println!("[SCAN] IAM Usersのスキャンを開始");
+            debug!("IAM Usersのスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 "IAM Usersのスキャン中...".to_string(),
@@ -63,7 +64,7 @@ impl AwsIamScanner {
             let count = users.len();
             results.insert("users".to_string(), Value::Array(users));
             completed_targets += 1;
-            println!("[SCAN] IAM Usersのスキャン完了: {}件", count);
+            debug!(count, "IAM Usersのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 format!("IAM Usersのスキャン完了: {}件", count),
@@ -74,7 +75,7 @@ impl AwsIamScanner {
 
         // Groups
         if scan_targets.get("groups").copied().unwrap_or(false) {
-            println!("[SCAN] IAM Groupsのスキャンを開始");
+            debug!("IAM Groupsのスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 "IAM Groupsのスキャン中...".to_string(),
@@ -83,7 +84,7 @@ impl AwsIamScanner {
             let count = groups.len();
             results.insert("groups".to_string(), Value::Array(groups));
             completed_targets += 1;
-            println!("[SCAN] IAM Groupsのスキャン完了: {}件", count);
+            debug!(count, "IAM Groupsのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 format!("IAM Groupsのスキャン完了: {}件", count),
@@ -94,7 +95,7 @@ impl AwsIamScanner {
 
         // Roles
         if scan_targets.get("roles").copied().unwrap_or(false) {
-            println!("[SCAN] IAM Rolesのスキャンを開始");
+            debug!("IAM Rolesのスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 "IAM Rolesのスキャン中...".to_string(),
@@ -103,7 +104,7 @@ impl AwsIamScanner {
             let count = roles.len();
             results.insert("roles".to_string(), Value::Array(roles));
             completed_targets += 1;
-            println!("[SCAN] IAM Rolesのスキャン完了: {}件", count);
+            debug!(count, "IAM Rolesのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 format!("IAM Rolesのスキャン完了: {}件", count),
@@ -114,7 +115,7 @@ impl AwsIamScanner {
 
         // Policies
         if scan_targets.get("policies").copied().unwrap_or(false) {
-            println!("[SCAN] IAM Policiesのスキャンを開始");
+            debug!("IAM Policiesのスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 "IAM Policiesのスキャン中...".to_string(),
@@ -123,7 +124,7 @@ impl AwsIamScanner {
             let count = policies.len();
             results.insert("policies".to_string(), Value::Array(policies));
             completed_targets += 1;
-            println!("[SCAN] IAM Policiesのスキャン完了: {}件", count);
+            debug!(count, "IAM Policiesのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 format!("IAM Policiesのスキャン完了: {}件", count),
@@ -134,7 +135,7 @@ impl AwsIamScanner {
 
         // Attachments
         if scan_targets.get("attachments").copied().unwrap_or(false) {
-            println!("[SCAN] IAM Attachmentsのスキャンを開始");
+            debug!("IAM Attachmentsのスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 "IAM Attachmentsのスキャン中...".to_string(),
@@ -143,7 +144,7 @@ impl AwsIamScanner {
             let count = attachments.len();
             results.insert("attachments".to_string(), Value::Array(attachments));
             completed_targets += 1;
-            println!("[SCAN] IAM Attachmentsのスキャン完了: {}件", count);
+            debug!(count, "IAM Attachmentsのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 format!("IAM Attachmentsのスキャン完了: {}件", count),
@@ -154,9 +155,7 @@ impl AwsIamScanner {
 
         // Cleanup
         if scan_targets.get("cleanup").copied().unwrap_or(false) {
-            println!(
-                "[SCAN] IAM Cleanup（アクセスキー、ログインプロファイル、MFA）のスキャンを開始"
-            );
+            debug!("IAM Cleanup（アクセスキー、ログインプロファイル、MFA）のスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 "IAM Cleanup（アクセスキー、ログインプロファイル、MFA）のスキャン中...".to_string(),
@@ -165,7 +164,7 @@ impl AwsIamScanner {
             let count = cleanup.len();
             results.insert("cleanup".to_string(), Value::Array(cleanup));
             completed_targets += 1;
-            println!("[SCAN] IAM Cleanupのスキャン完了: {}件", count);
+            debug!(count, "IAM Cleanupのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 format!("IAM Cleanupのスキャン完了: {}件", count),
@@ -174,10 +173,7 @@ impl AwsIamScanner {
             results.insert("cleanup".to_string(), Value::Array(Vec::new()));
         }
 
-        println!(
-            "[SCAN] AWS IAMスキャン完了: 合計{}ms",
-            start_time.elapsed().as_millis()
-        );
+        info!(elapsed_ms = start_time.elapsed().as_millis(), "AWS IAMスキャン完了");
         progress_callback(
             100,
             format!(
