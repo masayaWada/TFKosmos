@@ -75,6 +75,9 @@ lerna-debug.log*
 .env.test
 .env.production
 
+# MCP configuration (contains API keys)
+.mcp.json
+
 # Temporary files
 *.tmp
 *.temp
