@@ -1,9 +1,11 @@
+import { memo } from 'react';
+
 interface SuccessMessageProps {
   message: string
   onClose?: () => void
 }
 
-export default function SuccessMessage({ message, onClose }: SuccessMessageProps) {
+const SuccessMessage = memo(function SuccessMessage({ message, onClose }: SuccessMessageProps) {
   return (
     <div style={{
       padding: '1rem',
@@ -34,5 +36,7 @@ export default function SuccessMessage({ message, onClose }: SuccessMessageProps
       )}
     </div>
   )
-}
+});
+
+export default SuccessMessage;
 

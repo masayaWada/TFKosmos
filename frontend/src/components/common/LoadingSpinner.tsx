@@ -1,4 +1,6 @@
-export default function LoadingSpinner() {
+import { memo } from 'react';
+
+const LoadingSpinner = memo(function LoadingSpinner() {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '2rem' }}>
       <div style={{
@@ -17,5 +19,7 @@ export default function LoadingSpinner() {
       `}</style>
     </div>
   )
-}
+});
+
+export default LoadingSpinner;
 

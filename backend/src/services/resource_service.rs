@@ -192,3 +192,118 @@ impl ResourceService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_resource_matches_search_string_field() {
+        let resource = json!({
+            "name": "TestUser",
+            "arn": "arn:aws:iam::123456789012:user/TestUser"
+        });
+
+        assert!(ResourceService::resource_matches_search(&resource, "testuser"));
+        assert!(ResourceService::resource_matches_search(&resource, "123456789012"));
+        assert!(!ResourceService::resource_matches_search(&resource, "nonexistent"));
+    }
+
+    #[test]
+    fn test_resource_matches_search_case_insensitive() {
+        // 注意: resource_matches_search は検索語を小文字化しない
+        // apply_filters で小文字化されるため、直接呼び出す場合は小文字で渡す
+        let resource = json!({
+            "name": "AdminUser"
+        });
+
+        assert!(ResourceService::resource_matches_search(&resource, "adminuser"));
+        assert!(ResourceService::resource_matches_search(&resource, "admin"));
+    }
+
+    #[test]
+    fn test_resource_matches_search_nested_object() {
+        let resource = json!({
+            "name": "TestRole",
+            "permissions": {
+                "action": "s3:GetObject",
+                "resource": "*"
+            }
+        });
+
+        assert!(ResourceService::resource_matches_search(&resource, "s3:getobject"));
+        assert!(ResourceService::resource_matches_search(&resource, "testrole"));
+    }
+
+    #[test]
+    fn test_resource_matches_search_array_field() {
+        let resource = json!({
+            "name": "TestGroup",
+            "members": ["user1", "user2", "admin"]
+        });
+
+        assert!(ResourceService::resource_matches_search(&resource, "user1"));
+        assert!(ResourceService::resource_matches_search(&resource, "admin"));
+        assert!(!ResourceService::resource_matches_search(&resource, "user3"));
+    }
+
+    #[test]
+    fn test_value_contains_search_number() {
+        let value = json!(12345);
+        assert!(ResourceService::value_contains_search(&value, "123"));
+        assert!(ResourceService::value_contains_search(&value, "12345"));
+        assert!(!ResourceService::value_contains_search(&value, "999"));
+    }
+
+    #[test]
+    fn test_value_contains_search_boolean() {
+        let value_true = json!(true);
+        let value_false = json!(false);
+
+        assert!(ResourceService::value_contains_search(&value_true, "true"));
+        assert!(ResourceService::value_contains_search(&value_false, "false"));
+    }
+
+    #[test]
+    fn test_apply_filters_with_search_term() {
+        let resources = vec![
+            json!({"name": "AdminUser", "type": "user"}),
+            json!({"name": "TestRole", "type": "role"}),
+            json!({"name": "AdminGroup", "type": "group"}),
+        ];
+
+        let filters = json!({"search": "Admin"});
+        let result = ResourceService::apply_filters(resources, filters).unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert!(result.iter().any(|r| r["name"] == "AdminUser"));
+        assert!(result.iter().any(|r| r["name"] == "AdminGroup"));
+    }
+
+    #[test]
+    fn test_apply_filters_empty_search() {
+        let resources = vec![
+            json!({"name": "User1"}),
+            json!({"name": "User2"}),
+        ];
+
+        let filters = json!({"search": ""});
+        let result = ResourceService::apply_filters(resources.clone(), filters).unwrap();
+
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_apply_filters_no_match() {
+        let resources = vec![
+            json!({"name": "User1"}),
+            json!({"name": "User2"}),
+        ];
+
+        let filters = json!({"search": "nonexistent"});
+        let result = ResourceService::apply_filters(resources, filters).unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+}

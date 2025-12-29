@@ -5,15 +5,17 @@
       "command": "npx",
       "args": [
         "-y",
-        "@upstash/cpntext7-mcp"
-      ],
-      "env": {}
+        "@upstash/context7-mcp",
+        "--api-key",
+        "ctx7sk-ed9a059f-636a-4e53-a363-25d312f30a51"
+      ]
     },
-    "Playwright": {
+    "playwright": {
       "type": "stdio",
       "command": "npx",
       "args": [
-        "@Playwright/mcp@latest"
+        "-y",
+        "@playwright/mcp@latest"
       ],
       "env": {}
     }

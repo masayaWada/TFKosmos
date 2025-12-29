@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use tokio::process::Command;
 
+use crate::api::error::ApiError;
 use crate::models::ConnectionTestResponse;
 use crate::services::connection_service::ConnectionService;
 
@@ -133,38 +134,34 @@ struct AzureConnectionRequest {
 
 async fn test_aws_connection(
     Json(request): Json<AwsConnectionRequest>,
-) -> Result<Json<ConnectionTestResponse>, (StatusCode, Json<Value>)> {
-    match ConnectionService::test_aws_connection(
+) -> Result<Json<ConnectionTestResponse>, ApiError> {
+    ConnectionService::test_aws_connection(
         request.profile.clone(),
         request.assume_role_arn.clone(),
         request.assume_role_session_name.clone(),
     )
     .await
-    {
-        Ok(result) => Ok(Json(result)),
-        Err(e) => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": e.to_string() })),
-        )),
-    }
+    .map(Json)
+    .map_err(|e| ApiError::ExternalService {
+        service: "AWS".to_string(),
+        message: e.to_string(),
+    })
 }
 
 async fn test_azure_connection(
     Json(request): Json<AzureConnectionRequest>,
-) -> Result<Json<ConnectionTestResponse>, (StatusCode, Json<Value>)> {
-    match ConnectionService::test_azure_connection(
+) -> Result<Json<ConnectionTestResponse>, ApiError> {
+    ConnectionService::test_azure_connection(
         request.auth_method.clone(),
         request.tenant_id.clone(),
         request.service_principal_config.clone(),
     )
     .await
-    {
-        Ok(result) => Ok(Json(result)),
-        Err(e) => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": e.to_string() })),
-        )),
-    }
+    .map(Json)
+    .map_err(|e| ApiError::ExternalService {
+        service: "Azure".to_string(),
+        message: e.to_string(),
+    })
 }
 
 #[derive(Deserialize)]
@@ -177,7 +174,7 @@ struct AzureSubscriptionsQuery {
 
 async fn list_azure_subscriptions(
     Query(params): Query<AzureSubscriptionsQuery>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> Result<Json<Value>, ApiError> {
     let service_principal_config = if params.auth_method.as_deref() == Some("service_principal")
         && params.client_id.is_some()
         && params.client_secret.is_some()
@@ -190,19 +187,17 @@ async fn list_azure_subscriptions(
         None
     };
 
-    match ConnectionService::list_azure_subscriptions(
+    ConnectionService::list_azure_subscriptions(
         params.auth_method,
         params.tenant_id,
         service_principal_config,
     )
     .await
-    {
-        Ok(subscriptions) => Ok(Json(json!({ "subscriptions": subscriptions }))),
-        Err(e) => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": e.to_string() })),
-        )),
-    }
+    .map(|subscriptions| Json(json!({ "subscriptions": subscriptions })))
+    .map_err(|e| ApiError::ExternalService {
+        service: "Azure".to_string(),
+        message: e.to_string(),
+    })
 }
 
 #[derive(Deserialize)]
@@ -216,7 +211,7 @@ struct AzureResourceGroupsQuery {
 
 async fn list_azure_resource_groups(
     Query(params): Query<AzureResourceGroupsQuery>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> Result<Json<Value>, ApiError> {
     let service_principal_config = if params.auth_method.as_deref() == Some("service_principal")
         && params.client_id.is_some()
         && params.client_secret.is_some()
@@ -229,18 +224,16 @@ async fn list_azure_resource_groups(
         None
     };
 
-    match ConnectionService::list_azure_resource_groups(
+    ConnectionService::list_azure_resource_groups(
         params.subscription_id,
         params.auth_method,
         params.tenant_id,
         service_principal_config,
     )
     .await
-    {
-        Ok(resource_groups) => Ok(Json(json!({ "resource_groups": resource_groups }))),
-        Err(e) => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": e.to_string() })),
-        )),
-    }
+    .map(|resource_groups| Json(json!({ "resource_groups": resource_groups })))
+    .map_err(|e| ApiError::ExternalService {
+        service: "Azure".to_string(),
+        message: e.to_string(),
+    })
 }

@@ -1,11 +1,13 @@
+import { memo, useMemo } from 'react';
+
 interface ErrorMessageProps {
   message: string;
   onClose?: () => void;
 }
 
-export default function ErrorMessage({ message, onClose }: ErrorMessageProps) {
+const ErrorMessage = memo(function ErrorMessage({ message, onClose }: ErrorMessageProps) {
   // メッセージに改行が含まれている場合は、複数行で表示
-  const lines = message.split("\n");
+  const lines = useMemo(() => message.split("\n"), [message]);
 
   return (
     <div
@@ -49,4 +51,6 @@ export default function ErrorMessage({ message, onClose }: ErrorMessageProps) {
       )}
     </div>
   );
-}
+});
+
+export default ErrorMessage;
