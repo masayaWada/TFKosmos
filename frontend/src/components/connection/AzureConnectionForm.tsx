@@ -39,13 +39,12 @@ export default function AzureConnectionForm() {
         }`
       );
 
-      // 接続設定をlocalStorageに保存
+      // 接続設定をlocalStorageに保存（機密情報は保存しない）
       const connectionSettings = {
         auth_method: authMethod,
         tenant_id: tenantId || undefined,
         client_id: authMethod === "service_principal" ? clientId : undefined,
-        client_secret:
-          authMethod === "service_principal" ? clientSecret : undefined,
+        // client_secret はセキュリティ上の理由から保存しない
       };
       localStorage.setItem(
         "azure_connection_settings",
