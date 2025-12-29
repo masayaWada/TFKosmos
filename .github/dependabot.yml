@@ -1,0 +1,10 @@
+# Dependabotのバージョン更新を開始するには、更新対象のパッケージエコシステムと、パッケージマニフェストの保存場所を指定する必要があります。
+# すべての設定オプションについては、以下のドキュメントを参照してください：
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  - package-ecosystem: "" # 可能な値についてはドキュメントを参照してください
+    directory: "/" # パッケージマニフェストの場所
+    schedule:
+      interval: "weekly"
