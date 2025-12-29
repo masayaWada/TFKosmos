@@ -8,55 +8,38 @@ TFKosmosは、既存のクラウドインフラストラクチャ（AWS/Azure IA
 
 ## ビルドおよび実行コマンド
 
-### 開発環境（推奨）
+すべての起動・ビルドコマンドはMakefileで管理しています。
 
-フロントエンドとバックエンドを同時に起動します：
+### 開発環境
 
 ```bash
-make dev
+make dev    # バックエンド + フロントエンドを起動
 ```
 
 これにより以下が起動します：
 - バックエンド：http://0.0.0.0:8000
-- フロントエンド: http://localhost:5173
-
-### バックエンドのみ
-
-```bash
-cd backend
-cargo run              # 開発モード
-cargo run --release    # 最適化リリースモード
-cargo build            # ビルドのみ
-cargo clean            # ビルドアーティファクトのクリーンアップ
-```
-
-`cargo`が見つからない場合、`source ~/.cargo/env`を実行してください。
-
-### フロントエンドのみ
-
-```bash
-cd frontend
-npm install  # 初回のみ
-npm run dev
-```
-
-注: スキャン機能はフロントエンドとバックエンドの両方が実行されている必要があります。
+- フロントエンド：http://localhost:5173
 
 ### Tauri デスクトップアプリ
 
 ```bash
-npm run tauri:dev    # 開発モード
-npm run tauri:build  # 本番ビルド
+make tauri  # Tauriデスクトップアプリを開発モードで起動
 ```
 
-Tauriアプリはフロントエンドを埋め込み、バックエンドがローカルホスト:8000で別途実行されることを想定しています。
+注：Tauriはバックエンドが必要なため、先に別ターミナルで `make dev` を実行してください。
 
-### クリーンアップ
+### ビルド・クリーンアップ
 
 ```bash
-make clean                    # 全てをクリーンアップ
-cd backend && cargo clean     # バックエンドのみ
-cd frontend && rm -rf node_modules dist  # フロントエンドのみ
+make build    # 開発用ビルド
+make release  # リリース用最適化ビルド
+make clean    # ビルド成果物をクリーンアップ
+```
+
+### コマンド一覧
+
+```bash
+make help   # 利用可能なコマンドを表示
 ```
 
 ## アーキテクチャ
