@@ -332,5 +332,89 @@ Terraformコード生成
 }
 ```
 
+### 3.6 エラーレスポンス形式
+
+すべてのAPIエンドポイントは統一されたエラーレスポンス形式を返します。
+
+#### エラーレスポンス構造
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error message",
+    "details": { ... }
+  }
+}
+```
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|-----|------|
+| `code` | string | ○ | エラーコード（クライアント側での処理に使用） |
+| `message` | string | ○ | 人間が読めるエラーメッセージ |
+| `details` | object | × | 追加の詳細情報 |
+
+#### エラーコード一覧
+
+| エラーコード | HTTPステータス | 説明 |
+|-------------|---------------|------|
+| `VALIDATION_ERROR` | 400 | リクエストパラメータが不正 |
+| `UNAUTHORIZED` | 401 | 認証が必要、または認証に失敗 |
+| `FORBIDDEN` | 403 | アクセス権限がない |
+| `NOT_FOUND` | 404 | リソースが見つからない |
+| `EXTERNAL_SERVICE_ERROR` | 502 | 外部サービス（AWS/Azure）でエラー発生 |
+| `INTERNAL_ERROR` | 500 | サーバー内部エラー |
+
+#### エラーレスポンス例
+
+**バリデーションエラー (400):**
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid scan configuration",
+    "details": {
+      "field": "profile",
+      "reason": "Profile name is required for AWS scan"
+    }
+  }
+}
+```
+
+**リソース未検出 (404):**
+
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Scan result not found",
+    "details": {
+      "scan_id": "scan-abc123"
+    }
+  }
+}
+```
+
+**外部サービスエラー (502):**
+
+```json
+{
+  "error": {
+    "code": "EXTERNAL_SERVICE_ERROR",
+    "message": "AWS service error: Access Denied",
+    "details": {
+      "service": "AWS",
+      "aws_error_code": "AccessDenied"
+    }
+  }
+}
+```
+
+#### 後方互換性
+
+レガシー形式（`{ "detail": "message" }`）も一部エンドポイントでサポートされています。
+新規開発では新形式（`{ "error": { ... } }`）を使用してください。
+
 ---
 
