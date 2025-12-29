@@ -51,3 +51,5 @@ clean:
 	@cd backend && source ~/.cargo/env && cargo clean
 	@cd frontend && rm -rf node_modules dist
 	@cd deployment/src-tauri && cargo clean 2>/dev/null || true
+	@rm -rf backend/terraform-output/* 2>/dev/null || true
+	@echo "クリーンアップが完了しました"

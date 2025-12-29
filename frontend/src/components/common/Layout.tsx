@@ -7,9 +7,9 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', height: '100vh' }}>
       <Navigation />
-      <main style={{ flex: 1, padding: '2rem' }}>
+      <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
         {children}
       </main>
     </div>
