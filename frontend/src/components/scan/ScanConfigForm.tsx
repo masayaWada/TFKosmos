@@ -24,7 +24,6 @@ const AWS_DEFAULT_TARGETS = {
   roles: false,
   policies: false,
   attachments: true,
-  cleanup: false,
 };
 
 const AZURE_DEFAULT_TARGETS = {
@@ -270,6 +269,19 @@ export default function ScanConfigForm({
     setScanTargets((prev) => ({ ...prev, [target]: !prev[target] }));
   };
 
+  const toggleAllTargets = useCallback(
+    (checked: boolean) => {
+      const defaultTargets =
+        provider === "aws" ? AWS_DEFAULT_TARGETS : AZURE_DEFAULT_TARGETS;
+      const newTargets: Record<string, boolean> = {};
+      Object.keys(defaultTargets).forEach((key) => {
+        newTargets[key] = checked;
+      });
+      setScanTargets(newTargets);
+    },
+    [provider]
+  );
+
   return (
     <div style={formStyles.container}>
       <h2>{provider === "aws" ? "AWS" : "Azure"} IAMスキャン設定</h2>
@@ -318,6 +330,7 @@ export default function ScanConfigForm({
         provider={provider}
         scanTargets={scanTargets}
         toggleTarget={toggleTarget}
+        toggleAllTargets={toggleAllTargets}
       />
 
       <div style={formStyles.fieldGroup}>

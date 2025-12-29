@@ -153,21 +153,23 @@ impl AwsIamScanner {
             results.insert("attachments".to_string(), Value::Array(Vec::new()));
         }
 
-        // Cleanup
-        if scan_targets.get("cleanup").copied().unwrap_or(false) {
+        // Cleanup (Access Keys, Login Profiles, MFA) - usersがtrueの場合に自動的にスキャン
+        // 注: cleanup単独の指定は後方互換性のために残すが、usersがtrueでもスキャンされる
+        if scan_targets.get("users").copied().unwrap_or(false)
+            || scan_targets.get("cleanup").copied().unwrap_or(false)
+        {
             debug!("IAM Cleanup（アクセスキー、ログインプロファイル、MFA）のスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
-                "IAM Cleanup（アクセスキー、ログインプロファイル、MFA）のスキャン中...".to_string(),
+                "IAM Users関連情報（アクセスキー、ログインプロファイル、MFA）のスキャン中...".to_string(),
             );
             let cleanup = self.scan_cleanup().await?;
             let count = cleanup.len();
             results.insert("cleanup".to_string(), Value::Array(cleanup));
-            completed_targets += 1;
             debug!(count, "IAM Cleanupのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
-                format!("IAM Cleanupのスキャン完了: {}件", count),
+                format!("IAM Users関連情報のスキャン完了: {}件", count),
             );
         } else {
             results.insert("cleanup".to_string(), Value::Array(Vec::new()));
