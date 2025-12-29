@@ -1,12 +1,32 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
+import { AppProvider } from "./context/AppContext";
 import Layout from "./components/common/Layout";
-import ConnectionPage from "./pages/ConnectionPage";
-import ScanPage from "./pages/ScanPage";
-import ResourcesPage from "./pages/ResourcesPage";
-import GeneratePage from "./pages/GeneratePage";
-import TemplatesPage from "./pages/TemplatesPage";
+import NotificationContainer from "./components/common/NotificationContainer";
 import LoadingSpinner from "./components/common/LoadingSpinner";
+
+// ページの遅延読み込み（コード分割）
+const ConnectionPage = lazy(() => import("./pages/ConnectionPage"));
+const ScanPage = lazy(() => import("./pages/ScanPage"));
+const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
+const GeneratePage = lazy(() => import("./pages/GeneratePage"));
+const TemplatesPage = lazy(() => import("./pages/TemplatesPage"));
+
+// Suspense用のフォールバックコンポーネント
+function PageLoadingFallback() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: "200px",
+      }}
+    >
+      <LoadingSpinner />
+    </div>
+  );
+}
 
 // Tauri環境かどうかを判定
 const isTauri =
@@ -81,18 +101,23 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<ConnectionPage />} />
-          <Route path="/connection" element={<ConnectionPage />} />
-          <Route path="/scan" element={<ScanPage />} />
-          <Route path="/resources/:scanId" element={<ResourcesPage />} />
-          <Route path="/generate/:scanId" element={<GeneratePage />} />
-          <Route path="/templates" element={<TemplatesPage />} />
-        </Routes>
-      </Layout>
-    </BrowserRouter>
+    <AppProvider>
+      <BrowserRouter>
+        <NotificationContainer />
+        <Layout>
+          <Suspense fallback={<PageLoadingFallback />}>
+            <Routes>
+              <Route path="/" element={<ConnectionPage />} />
+              <Route path="/connection" element={<ConnectionPage />} />
+              <Route path="/scan" element={<ScanPage />} />
+              <Route path="/resources/:scanId" element={<ResourcesPage />} />
+              <Route path="/generate/:scanId" element={<GeneratePage />} />
+              <Route path="/templates" element={<TemplatesPage />} />
+            </Routes>
+          </Suspense>
+        </Layout>
+      </BrowserRouter>
+    </AppProvider>
   );
 }
 

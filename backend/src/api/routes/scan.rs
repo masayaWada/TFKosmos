@@ -1,12 +1,12 @@
 use axum::{
     extract::Path,
-    http::StatusCode,
     response::Json,
     routing::{get, post},
     Router,
 };
 use serde_json::{json, Value};
 
+use crate::api::error::ApiError;
 use crate::services::scan_service::ScanService;
 
 pub fn router() -> Router {
@@ -21,9 +21,7 @@ struct ScanRequest {
     config: crate::models::ScanConfig,
 }
 
-async fn scan_aws(
-    Json(request): Json<ScanRequest>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+async fn scan_aws(Json(request): Json<ScanRequest>) -> Result<Json<Value>, ApiError> {
     let mut config = request.config;
     config.provider = "aws".to_string();
 
@@ -32,16 +30,14 @@ async fn scan_aws(
             "scan_id": scan_id,
             "status": "in_progress"
         }))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "detail": e.to_string() })),
-        )),
+        Err(e) => Err(ApiError::ExternalService {
+            service: "AWS".to_string(),
+            message: e.to_string(),
+        }),
     }
 }
 
-async fn scan_azure(
-    Json(request): Json<ScanRequest>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+async fn scan_azure(Json(request): Json<ScanRequest>) -> Result<Json<Value>, ApiError> {
     let mut config = request.config;
     config.provider = "azure".to_string();
 
@@ -50,16 +46,14 @@ async fn scan_azure(
             "scan_id": scan_id,
             "status": "in_progress"
         }))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "detail": e.to_string() })),
-        )),
+        Err(e) => Err(ApiError::ExternalService {
+            service: "Azure".to_string(),
+            message: e.to_string(),
+        }),
     }
 }
 
-async fn get_scan_status(
-    Path(scan_id): Path<String>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+async fn get_scan_status(Path(scan_id): Path<String>) -> Result<Json<Value>, ApiError> {
     match ScanService::get_scan_result(&scan_id).await {
         Some(result) => {
             let mut response = json!({
@@ -72,10 +66,10 @@ async fn get_scan_status(
                 response["summary"] = json!(summary);
             }
             Ok(Json(response))
-        },
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(json!({ "detail": "Scan not found" })),
-        )),
+        }
+        None => Err(ApiError::NotFound(format!(
+            "Scan with ID '{}' not found",
+            scan_id
+        ))),
     }
 }

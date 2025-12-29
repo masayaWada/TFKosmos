@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { memo, useState, useMemo, useCallback } from "react";
 import ResourceDetail from "./ResourceDetail";
 
 interface ResourceTableProps {
@@ -17,7 +17,7 @@ interface ResourceTableProps {
 
 type SortDirection = "asc" | "desc" | null;
 
-export default function ResourceTable({
+const ResourceTable = memo(function ResourceTable({
   resources,
   selectedIds,
   onSelectionChange,
@@ -30,35 +30,47 @@ export default function ResourceTable({
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
-  const allSelected =
-    resources.length > 0 &&
-    resources.every((r) => selectedIds.has(getResourceId(r)));
-  const someSelected = resources.some((r) => selectedIds.has(getResourceId(r)));
 
-  const handleRowClick = (resource: any) => {
+  const allSelected = useMemo(
+    () =>
+      resources.length > 0 &&
+      resources.every((r) => selectedIds.has(getResourceId(r))),
+    [resources, selectedIds, getResourceId]
+  );
+
+  const someSelected = useMemo(
+    () => resources.some((r) => selectedIds.has(getResourceId(r))),
+    [resources, selectedIds, getResourceId]
+  );
+
+  const handleRowClick = useCallback((resource: any) => {
     setSelectedResource(resource);
     setIsDetailOpen(true);
-  };
+  }, []);
 
-  const handleCloseDetail = () => {
+  const handleCloseDetail = useCallback(() => {
     setIsDetailOpen(false);
     setSelectedResource(null);
-  };
+  }, []);
 
-  const handleSort = (columnKey: string) => {
-    if (sortColumn === columnKey) {
-      // Cycle through: asc -> desc -> null
-      if (sortDirection === "asc") {
-        setSortDirection("desc");
-      } else if (sortDirection === "desc") {
-        setSortColumn(null);
-        setSortDirection(null);
+  const handleSort = useCallback((columnKey: string) => {
+    setSortColumn((prevColumn) => {
+      if (prevColumn === columnKey) {
+        setSortDirection((prevDirection) => {
+          if (prevDirection === "asc") return "desc";
+          if (prevDirection === "desc") {
+            setSortColumn(null);
+            return null;
+          }
+          return "asc";
+        });
+        return prevColumn;
+      } else {
+        setSortDirection("asc");
+        return columnKey;
       }
-    } else {
-      setSortColumn(columnKey);
-      setSortDirection("asc");
-    }
-  };
+    });
+  }, []);
 
   const sortedResources = useMemo(() => {
     if (!sortColumn || !sortDirection) {
@@ -198,4 +210,6 @@ export default function ResourceTable({
       />
     </>
   );
-}
+});
+
+export default ResourceTable;

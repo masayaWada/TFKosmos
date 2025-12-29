@@ -1,6 +1,5 @@
 use axum::{
     extract::{Path, Query},
-    http::StatusCode,
     response::Json,
     routing::{get, post},
     Router,
@@ -8,6 +7,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::api::error::ApiError;
 use crate::models::ResourceListResponse;
 use crate::services::resource_service::ResourceService;
 
@@ -30,7 +30,7 @@ struct GetResourcesQuery {
 async fn get_resources(
     Path(scan_id): Path<String>,
     Query(params): Query<GetResourcesQuery>,
-) -> Result<Json<ResourceListResponse>, (StatusCode, Json<Value>)> {
+) -> Result<Json<ResourceListResponse>, ApiError> {
     let page = params.page.unwrap_or(1);
     let page_size = params.page_size.unwrap_or(50);
 
@@ -40,7 +40,7 @@ async fn get_resources(
         None
     };
 
-    match ResourceService::get_resources(
+    ResourceService::get_resources(
         &scan_id,
         params.resource_type.as_deref(),
         page,
@@ -48,13 +48,15 @@ async fn get_resources(
         filter_conditions,
     )
     .await
-    {
-        Ok(result) => Ok(Json(result)),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "detail": e.to_string() })),
-        )),
-    }
+    .map(Json)
+    .map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("not found") || msg.contains("Scan not found") {
+            ApiError::NotFound(format!("Scan with ID '{}' not found", scan_id))
+        } else {
+            ApiError::Internal(msg)
+        }
+    })
 }
 
 #[derive(Deserialize)]
@@ -65,26 +67,20 @@ struct SelectResourcesRequest {
 async fn select_resources(
     Path(scan_id): Path<String>,
     Json(request): Json<SelectResourcesRequest>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    match ResourceService::update_selection(&scan_id, request.selections).await {
-        Ok(result) => Ok(Json(json!(result))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "detail": e.to_string() })),
-        )),
-    }
+) -> Result<Json<Value>, ApiError> {
+    ResourceService::update_selection(&scan_id, request.selections)
+        .await
+        .map(|result| Json(json!(result)))
+        .map_err(|e| ApiError::Internal(e.to_string()))
 }
 
-async fn get_selected_resources(
-    Path(scan_id): Path<String>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    match ResourceService::get_selection(&scan_id).await {
-        Ok(selections) => Ok(Json(json!({
-            "selections": selections
-        }))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "detail": e.to_string() })),
-        )),
-    }
+async fn get_selected_resources(Path(scan_id): Path<String>) -> Result<Json<Value>, ApiError> {
+    ResourceService::get_selection(&scan_id)
+        .await
+        .map(|selections| {
+            Json(json!({
+                "selections": selections
+            }))
+        })
+        .map_err(|e| ApiError::Internal(e.to_string()))
 }

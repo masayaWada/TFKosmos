@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { memo, useEffect, useMemo, useCallback } from "react";
 
 interface ResourceDetailProps {
   resource: any;
@@ -7,19 +7,29 @@ interface ResourceDetailProps {
   onClose: () => void;
 }
 
-export default function ResourceDetail({
+const formatValue = (value: any): string => {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value, null, 2);
+  }
+  return String(value);
+};
+
+const ResourceDetail = memo(function ResourceDetail({
   resource,
   resourceType,
   isOpen,
   onClose,
 }: ResourceDetailProps) {
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
+  const handleEscape = useCallback((e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      onClose();
+    }
+  }, [onClose]);
 
+  useEffect(() => {
     if (isOpen) {
       document.addEventListener("keydown", handleEscape);
       document.body.style.overflow = "hidden";
@@ -29,23 +39,11 @@ export default function ResourceDetail({
       document.removeEventListener("keydown", handleEscape);
       document.body.style.overflow = "unset";
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, handleEscape]);
 
-  if (!isOpen || !resource) {
-    return null;
-  }
+  const resourceTitle = useMemo(() => {
+    if (!resource) return "Resource";
 
-  const formatValue = (value: any): string => {
-    if (value === null || value === undefined) {
-      return "-";
-    }
-    if (typeof value === "object") {
-      return JSON.stringify(value, null, 2);
-    }
-    return String(value);
-  };
-
-  const getResourceTitle = (): string => {
     if (resourceType === "users")
       return resource.user_name || resource.id || "User";
     if (resourceType === "groups")
@@ -81,7 +79,11 @@ export default function ResourceDetail({
       }`;
     }
     return "Resource";
-  };
+  }, [resource, resourceType]);
+
+  if (!isOpen || !resource) {
+    return null;
+  }
 
   return (
     <div
@@ -123,7 +125,7 @@ export default function ResourceDetail({
             alignItems: "center",
           }}
         >
-          <h2 style={{ margin: 0 }}>{getResourceTitle()}</h2>
+          <h2 style={{ margin: 0 }}>{resourceTitle}</h2>
           <button
             onClick={onClose}
             style={{
@@ -256,4 +258,6 @@ export default function ResourceDetail({
       </div>
     </div>
   );
-}
+});
+
+export default ResourceDetail;

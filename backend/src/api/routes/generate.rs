@@ -5,10 +5,12 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
 
+use crate::api::error::ApiError;
 use crate::models::GenerationResponse;
 use crate::services::generation_service::GenerationService;
 
@@ -42,25 +44,27 @@ struct GenerateTerraformRequest {
 
 async fn generate_terraform(
     Json(request): Json<GenerateTerraformRequest>,
-) -> Result<Json<GenerationResponse>, (StatusCode, Json<Value>)> {
-    println!("[API] Received generation request for scan_id: {}", request.scan_id);
-    println!("[API] Config: {:?}", request.config);
-    println!("[API] Selected resources: {:?}", request.selected_resources);
-    
+) -> Result<Json<GenerationResponse>, ApiError> {
+    info!(scan_id = %request.scan_id, "Received generation request");
+    debug!(config = ?request.config, "Generation config");
+    debug!(selected_resources = ?request.selected_resources, "Selected resources");
+
     // Convert selected_resources from HashMap<String, Value> to HashMap<String, Vec<Value>>
     // Value can be either an array of strings (IDs) or an array of objects
-    let mut selected_resources_converted: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
+    let mut selected_resources_converted: std::collections::HashMap<String, Vec<Value>> =
+        std::collections::HashMap::new();
     for (resource_type, value) in request.selected_resources {
         if let Some(array) = value.as_array() {
             selected_resources_converted.insert(resource_type, array.clone());
         } else if let Some(id_str) = value.as_str() {
             // Single string ID
-            selected_resources_converted.insert(resource_type, vec![Value::String(id_str.to_string())]);
+            selected_resources_converted
+                .insert(resource_type, vec![Value::String(id_str.to_string())]);
         }
     }
-    
-    println!("[API] Converted selected resources: {:?}", selected_resources_converted);
-    
+
+    debug!(converted = ?selected_resources_converted, "Converted selected resources");
+
     match GenerationService::generate_terraform(
         &request.scan_id,
         request.config,
@@ -69,9 +73,12 @@ async fn generate_terraform(
     .await
     {
         Ok(result) => {
-            println!("[API] Generation successful. Generation ID: {}, Files: {:?}", 
-                     result.generation_id, result.files);
-            
+            info!(
+                generation_id = %result.generation_id,
+                files_count = result.files.len(),
+                "Generation successful"
+            );
+
             // Store result in cache
             let cache_entry = GenerationCacheEntry {
                 output_path: result.output_path.clone(),
@@ -86,9 +93,9 @@ async fn generate_terraform(
         }
         Err(e) => {
             let error_msg = e.to_string();
-            eprintln!("[API] Generation failed: {}", error_msg);
-            
-            // Print error chain for debugging
+            warn!(error = %error_msg, "Generation failed");
+
+            // Log error chain for debugging
             let mut error_chain = Vec::new();
             let mut current_error: &dyn std::error::Error = e.as_ref();
             error_chain.push(current_error.to_string());
@@ -96,33 +103,30 @@ async fn generate_terraform(
                 error_chain.push(source.to_string());
                 current_error = source;
             }
-            eprintln!("[API] Error chain: {:?}", error_chain);
-            
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "detail": error_msg })),
-            ))
+            debug!(error_chain = ?error_chain, "Error chain");
+
+            Err(ApiError::Internal(error_msg))
         }
     }
 }
 
 async fn download_generated_files(
     Path(generation_id): Path<String>,
-) -> Result<Response, (StatusCode, Json<Value>)> {
+) -> Result<Response, ApiError> {
     let cache_entry = GENERATION_CACHE.read().await.get(&generation_id).cloned();
 
     let entry = cache_entry.ok_or_else(|| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "detail": "Generation result not found" })),
-        )
+        ApiError::NotFound(format!(
+            "Generation result with ID '{}' not found",
+            generation_id
+        ))
     })?;
 
     match GenerationService::create_zip(&entry.output_path, &generation_id).await {
         Ok(zip_data) => {
             use axum::body::Body;
 
-            let response = Response::builder()
+            Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/zip")
                 .header(
@@ -133,18 +137,8 @@ async fn download_generated_files(
                     ),
                 )
                 .body(Body::from(zip_data))
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({ "detail": format!("Failed to build response: {}", e) })),
-                    )
-                })?;
-
-            Ok(response)
+                .map_err(|e| ApiError::Internal(format!("Failed to build response: {}", e)))
         }
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "detail": format!("Failed to create ZIP: {}", e) })),
-        )),
+        Err(e) => Err(ApiError::Internal(format!("Failed to create ZIP: {}", e))),
     }
 }

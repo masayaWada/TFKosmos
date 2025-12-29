@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { formStyles } from "../../styles/formStyles";
 
 interface ScanTargetSelectorProps {
@@ -20,12 +21,15 @@ const AZURE_TARGETS = [
   { key: "role_assignments", label: "Role Assignments" },
 ];
 
-export default function ScanTargetSelector({
+const ScanTargetSelector = memo(function ScanTargetSelector({
   provider,
   scanTargets,
   toggleTarget,
 }: ScanTargetSelectorProps) {
-  const targets = provider === "aws" ? AWS_TARGETS : AZURE_TARGETS;
+  const targets = useMemo(
+    () => (provider === "aws" ? AWS_TARGETS : AZURE_TARGETS),
+    [provider]
+  );
 
   return (
     <div style={formStyles.fieldGroup}>
@@ -44,4 +48,6 @@ export default function ScanTargetSelector({
       </div>
     </div>
   );
-}
+});
+
+export default ScanTargetSelector;

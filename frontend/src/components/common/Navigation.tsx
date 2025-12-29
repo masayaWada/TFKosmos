@@ -1,13 +1,14 @@
+import { memo } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-export default function Navigation() {
-  const location = useLocation();
+const NAV_ITEMS = [
+  { path: "/connection", label: "接続設定" },
+  { path: "/scan", label: "スキャン" },
+  { path: "/templates", label: "テンプレート" },
+] as const;
 
-  const navItems = [
-    { path: "/connection", label: "接続設定" },
-    { path: "/scan", label: "スキャン" },
-    { path: "/templates", label: "テンプレート" },
-  ];
+const Navigation = memo(function Navigation() {
+  const location = useLocation();
 
   return (
     <nav
@@ -27,7 +28,7 @@ export default function Navigation() {
         <h2 style={{ margin: 0 }}>TFKosmos</h2>
       </div>
       <ul style={{ listStyle: "none" }}>
-        {navItems.map((item) => (
+        {NAV_ITEMS.map((item) => (
           <li key={item.path} style={{ marginBottom: "0.5rem" }}>
             <Link
               to={item.path}
@@ -48,4 +49,6 @@ export default function Navigation() {
       </ul>
     </nav>
   );
-}
+});
+
+export default Navigation;

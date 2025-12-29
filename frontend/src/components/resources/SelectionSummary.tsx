@@ -1,12 +1,17 @@
-import { useNavigate } from 'react-router-dom'
+import { memo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface SelectionSummaryProps {
   selectedCount: number
   scanId: string
 }
 
-export default function SelectionSummary({ selectedCount, scanId }: SelectionSummaryProps) {
-  const navigate = useNavigate()
+const SelectionSummary = memo(function SelectionSummary({ selectedCount, scanId }: SelectionSummaryProps) {
+  const navigate = useNavigate();
+
+  const handleClick = useCallback(() => {
+    navigate(`/generate/${scanId}`);
+  }, [navigate, scanId]);
 
   return (
     <div style={{
@@ -24,7 +29,7 @@ export default function SelectionSummary({ selectedCount, scanId }: SelectionSum
         <strong>{selectedCount}</strong> 個のリソースが選択されています
       </div>
       <button
-        onClick={() => navigate(`/generate/${scanId}`)}
+        onClick={handleClick}
         disabled={selectedCount === 0}
         style={{
           padding: '0.75rem 1.5rem',
@@ -39,5 +44,7 @@ export default function SelectionSummary({ selectedCount, scanId }: SelectionSum
       </button>
     </div>
   )
-}
+});
+
+export default SelectionSummary;
 

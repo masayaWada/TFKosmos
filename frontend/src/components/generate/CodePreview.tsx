@@ -1,19 +1,34 @@
-import { useState } from "react";
+import { memo, useState, useMemo, useEffect } from "react";
 import Editor from "@monaco-editor/react";
 
 interface CodePreviewProps {
   preview: Record<string, string>;
 }
 
-export default function CodePreview({ preview }: CodePreviewProps) {
+const getLanguage = (filename: string): string => {
+  if (filename.endsWith(".tf")) return "hcl";
+  if (filename.endsWith(".sh")) return "shell";
+  if (filename.endsWith(".ps1")) return "powershell";
+  if (filename.endsWith(".md")) return "markdown";
+  if (filename.endsWith(".json")) return "json";
+  if (filename.endsWith(".yaml") || filename.endsWith(".yml")) return "yaml";
+  return "plaintext";
+};
+
+const CodePreview = memo(function CodePreview({ preview }: CodePreviewProps) {
+  const files = useMemo(() => Object.keys(preview), [preview]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
 
-  // Set first file as active tab if not set
-  if (!activeTab && Object.keys(preview).length > 0) {
-    setActiveTab(Object.keys(preview)[0]);
-  }
+  // Set first file as active tab if not set or if preview changes
+  useEffect(() => {
+    if (files.length > 0 && (!activeTab || !files.includes(activeTab))) {
+      setActiveTab(files[0]);
+    }
+  }, [files, activeTab]);
 
-  const files = Object.keys(preview);
+  const activeLanguage = useMemo(() => {
+    return activeTab ? getLanguage(activeTab) : "plaintext";
+  }, [activeTab]);
 
   if (files.length === 0) {
     return (
@@ -22,16 +37,6 @@ export default function CodePreview({ preview }: CodePreviewProps) {
       </div>
     );
   }
-
-  const getLanguage = (filename: string): string => {
-    if (filename.endsWith(".tf")) return "hcl";
-    if (filename.endsWith(".sh")) return "shell";
-    if (filename.endsWith(".ps1")) return "powershell";
-    if (filename.endsWith(".md")) return "markdown";
-    if (filename.endsWith(".json")) return "json";
-    if (filename.endsWith(".yaml") || filename.endsWith(".yml")) return "yaml";
-    return "plaintext";
-  };
 
   return (
     <div
@@ -76,7 +81,7 @@ export default function CodePreview({ preview }: CodePreviewProps) {
         <div style={{ height: "500px" }}>
           <Editor
             height="100%"
-            language={getLanguage(activeTab)}
+            language={activeLanguage}
             value={preview[activeTab]}
             theme="vs-light"
             options={{
@@ -94,4 +99,6 @@ export default function CodePreview({ preview }: CodePreviewProps) {
       )}
     </div>
   );
-}
+});
+
+export default CodePreview;
