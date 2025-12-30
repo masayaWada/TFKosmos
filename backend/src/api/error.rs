@@ -143,39 +143,157 @@ mod tests {
 
     #[test]
     fn test_validation_error_status_code() {
+        // Arrange
         let error = ApiError::Validation("Invalid input".to_string());
-        assert_eq!(error.status_code(), StatusCode::BAD_REQUEST);
-        assert_eq!(error.code(), "VALIDATION_ERROR");
+
+        // Act
+        let status_code = error.status_code();
+        let code = error.code();
+
+        // Assert
+        assert_eq!(
+            status_code,
+            StatusCode::BAD_REQUEST,
+            "ValidationエラーはBAD_REQUESTを返すべき"
+        );
+        assert_eq!(
+            code, "VALIDATION_ERROR",
+            "Validationエラーのコードは'VALIDATION_ERROR'であるべき"
+        );
     }
 
     #[test]
     fn test_not_found_error_status_code() {
+        // Arrange
         let error = ApiError::NotFound("Resource not found".to_string());
-        assert_eq!(error.status_code(), StatusCode::NOT_FOUND);
-        assert_eq!(error.code(), "NOT_FOUND");
+
+        // Act
+        let status_code = error.status_code();
+        let code = error.code();
+
+        // Assert
+        assert_eq!(
+            status_code,
+            StatusCode::NOT_FOUND,
+            "NotFoundエラーはNOT_FOUNDを返すべき"
+        );
+        assert_eq!(
+            code, "NOT_FOUND",
+            "NotFoundエラーのコードは'NOT_FOUND'であるべき"
+        );
     }
 
     #[test]
     fn test_external_service_error_has_details() {
+        // Arrange
         let error = ApiError::ExternalService {
             service: "AWS".to_string(),
             message: "Connection failed".to_string(),
         };
-        assert_eq!(error.status_code(), StatusCode::BAD_GATEWAY);
-        assert!(error.details().is_some());
+
+        // Act
+        let status_code = error.status_code();
+        let details = error.details();
+
+        // Assert
+        assert_eq!(
+            status_code,
+            StatusCode::BAD_GATEWAY,
+            "ExternalServiceエラーはBAD_GATEWAYを返すべき"
+        );
+        assert!(
+            details.is_some(),
+            "ExternalServiceエラーには詳細情報が含まれるべき"
+        );
+    }
+
+    #[test]
+    fn test_external_service_error_message_format() {
+        // Arrange
+        let service = "AWS";
+        let message = "Connection failed";
+        let error = ApiError::ExternalService {
+            service: service.to_string(),
+            message: message.to_string(),
+        };
+
+        // Act
+        let error_message = error.message();
+
+        // Assert
+        assert!(
+            error_message.contains(service),
+            "エラーメッセージにサービス名が含まれるべき"
+        );
+        assert!(
+            error_message.contains(message),
+            "エラーメッセージに元のメッセージが含まれるべき"
+        );
     }
 
     #[test]
     fn test_anyhow_error_conversion_not_found() {
+        // Arrange
         let err = anyhow::anyhow!("Resource not found");
+
+        // Act
         let api_error: ApiError = err.into();
-        assert!(matches!(api_error, ApiError::NotFound(_)));
+
+        // Assert
+        assert!(
+            matches!(api_error, ApiError::NotFound(_)),
+            "'not found'を含むエラーはNotFoundに変換されるべき"
+        );
+    }
+
+    #[test]
+    fn test_anyhow_error_conversion_validation() {
+        // Arrange
+        let err = anyhow::anyhow!("validation failed: invalid input");
+
+        // Act
+        let api_error: ApiError = err.into();
+
+        // Assert
+        assert!(
+            matches!(api_error, ApiError::Validation(_)),
+            "'validation'を含むエラーはValidationに変換されるべき"
+        );
     }
 
     #[test]
     fn test_anyhow_error_conversion_internal() {
+        // Arrange
         let err = anyhow::anyhow!("Something went wrong");
+
+        // Act
         let api_error: ApiError = err.into();
-        assert!(matches!(api_error, ApiError::Internal(_)));
+
+        // Assert
+        assert!(
+            matches!(api_error, ApiError::Internal(_)),
+            "特定キーワードを含まないエラーはInternalに変換されるべき"
+        );
+    }
+
+    #[test]
+    fn test_internal_error_status_code() {
+        // Arrange
+        let error = ApiError::Internal("Internal server error".to_string());
+
+        // Act
+        let status_code = error.status_code();
+        let code = error.code();
+
+        // Assert
+        assert_eq!(
+            status_code,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "InternalエラーはINTERNAL_SERVER_ERRORを返すべき"
+        );
+        assert_eq!(
+            code, "INTERNAL_ERROR",
+            "Internalエラーのコードは'INTERNAL_ERROR'であるべき"
+        );
     }
 }

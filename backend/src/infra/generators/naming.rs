@@ -23,63 +23,221 @@ impl NamingGenerator {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_to_snake_case_with_hyphen() {
-        assert_eq!(NamingGenerator::to_snake_case("my-resource-name"), "my_resource_name");
+    mod to_snake_case_tests {
+        use super::*;
+
+        #[test]
+        fn test_with_hyphen() {
+            // Arrange
+            let input = "my-resource-name";
+
+            // Act
+            let result = NamingGenerator::to_snake_case(input);
+
+            // Assert
+            assert_eq!(
+                result, "my_resource_name",
+                "ハイフンをアンダースコアに変換するべき"
+            );
+        }
+
+        #[test]
+        fn test_with_dot() {
+            // Arrange
+            let input = "my.resource.name";
+
+            // Act
+            let result = NamingGenerator::to_snake_case(input);
+
+            // Assert
+            assert_eq!(
+                result, "my_resource_name",
+                "ドットをアンダースコアに変換するべき"
+            );
+        }
+
+        #[test]
+        fn test_with_uppercase() {
+            // Arrange
+            let input = "MyResourceName";
+
+            // Act
+            let result = NamingGenerator::to_snake_case(input);
+
+            // Assert
+            assert_eq!(result, "myresourcename", "大文字を小文字に変換するべき");
+        }
+
+        #[test]
+        fn test_mixed() {
+            // Arrange
+            let input = "My-Resource.Name";
+
+            // Act
+            let result = NamingGenerator::to_snake_case(input);
+
+            // Assert
+            assert_eq!(
+                result, "my_resource_name",
+                "混合パターンを正しく変換するべき"
+            );
+        }
+
+        #[test]
+        fn test_empty_string() {
+            // Arrange
+            let input = "";
+
+            // Act
+            let result = NamingGenerator::to_snake_case(input);
+
+            // Assert
+            assert_eq!(result, "", "空文字列は空文字列を返すべき");
+        }
     }
 
-    #[test]
-    fn test_to_snake_case_with_dot() {
-        assert_eq!(NamingGenerator::to_snake_case("my.resource.name"), "my_resource_name");
+    mod to_kebab_case_tests {
+        use super::*;
+
+        #[test]
+        fn test_with_underscore() {
+            // Arrange
+            let input = "my_resource_name";
+
+            // Act
+            let result = NamingGenerator::to_kebab_case(input);
+
+            // Assert
+            assert_eq!(
+                result, "my-resource-name",
+                "アンダースコアをハイフンに変換するべき"
+            );
+        }
+
+        #[test]
+        fn test_with_dot() {
+            // Arrange
+            let input = "my.resource.name";
+
+            // Act
+            let result = NamingGenerator::to_kebab_case(input);
+
+            // Assert
+            assert_eq!(
+                result, "my-resource-name",
+                "ドットをハイフンに変換するべき"
+            );
+        }
+
+        #[test]
+        fn test_with_uppercase() {
+            // Arrange
+            let input = "MyResourceName";
+
+            // Act
+            let result = NamingGenerator::to_kebab_case(input);
+
+            // Assert
+            assert_eq!(result, "myresourcename", "大文字を小文字に変換するべき");
+        }
+
+        #[test]
+        fn test_mixed() {
+            // Arrange
+            let input = "My_Resource.Name";
+
+            // Act
+            let result = NamingGenerator::to_kebab_case(input);
+
+            // Assert
+            assert_eq!(
+                result, "my-resource-name",
+                "混合パターンを正しく変換するべき"
+            );
+        }
+
+        #[test]
+        fn test_empty_string() {
+            // Arrange
+            let input = "";
+
+            // Act
+            let result = NamingGenerator::to_kebab_case(input);
+
+            // Assert
+            assert_eq!(result, "", "空文字列は空文字列を返すべき");
+        }
     }
 
-    #[test]
-    fn test_to_snake_case_with_uppercase() {
-        assert_eq!(NamingGenerator::to_snake_case("MyResourceName"), "myresourcename");
-    }
+    mod apply_naming_convention_tests {
+        use super::*;
 
-    #[test]
-    fn test_to_snake_case_mixed() {
-        assert_eq!(NamingGenerator::to_snake_case("My-Resource.Name"), "my_resource_name");
-    }
+        #[test]
+        fn test_snake_case() {
+            // Arrange
+            let input = "my-name";
+            let convention = "snake_case";
 
-    #[test]
-    fn test_to_kebab_case_with_underscore() {
-        assert_eq!(NamingGenerator::to_kebab_case("my_resource_name"), "my-resource-name");
-    }
+            // Act
+            let result = NamingGenerator::apply_naming_convention(input, convention);
 
-    #[test]
-    fn test_to_kebab_case_with_dot() {
-        assert_eq!(NamingGenerator::to_kebab_case("my.resource.name"), "my-resource-name");
-    }
+            // Assert
+            assert_eq!(result, "my_name", "snake_case規約を適用するべき");
+        }
 
-    #[test]
-    fn test_to_kebab_case_with_uppercase() {
-        assert_eq!(NamingGenerator::to_kebab_case("MyResourceName"), "myresourcename");
-    }
+        #[test]
+        fn test_kebab_case() {
+            // Arrange
+            let input = "my_name";
+            let convention = "kebab-case";
 
-    #[test]
-    fn test_to_kebab_case_mixed() {
-        assert_eq!(NamingGenerator::to_kebab_case("My_Resource.Name"), "my-resource-name");
-    }
+            // Act
+            let result = NamingGenerator::apply_naming_convention(input, convention);
 
-    #[test]
-    fn test_apply_naming_convention_snake_case() {
-        assert_eq!(NamingGenerator::apply_naming_convention("my-name", "snake_case"), "my_name");
-    }
+            // Assert
+            assert_eq!(result, "my-name", "kebab-case規約を適用するべき");
+        }
 
-    #[test]
-    fn test_apply_naming_convention_kebab_case() {
-        assert_eq!(NamingGenerator::apply_naming_convention("my_name", "kebab-case"), "my-name");
-    }
+        #[test]
+        fn test_original() {
+            // Arrange
+            let input = "My-Name_Test";
+            let convention = "original";
 
-    #[test]
-    fn test_apply_naming_convention_original() {
-        assert_eq!(NamingGenerator::apply_naming_convention("My-Name_Test", "original"), "My-Name_Test");
-    }
+            // Act
+            let result = NamingGenerator::apply_naming_convention(input, convention);
 
-    #[test]
-    fn test_apply_naming_convention_unknown_returns_original() {
-        assert_eq!(NamingGenerator::apply_naming_convention("My-Name", "unknown"), "My-Name");
+            // Assert
+            assert_eq!(result, "My-Name_Test", "original規約では入力をそのまま返すべき");
+        }
+
+        #[test]
+        fn test_unknown_returns_original() {
+            // Arrange
+            let input = "My-Name";
+            let convention = "unknown";
+
+            // Act
+            let result = NamingGenerator::apply_naming_convention(input, convention);
+
+            // Assert
+            assert_eq!(
+                result, "My-Name",
+                "不明な規約では入力をそのまま返すべき"
+            );
+        }
+
+        #[test]
+        fn test_empty_convention() {
+            // Arrange
+            let input = "My-Name";
+            let convention = "";
+
+            // Act
+            let result = NamingGenerator::apply_naming_convention(input, convention);
+
+            // Assert
+            assert_eq!(result, "My-Name", "空の規約では入力をそのまま返すべき");
+        }
     }
 }

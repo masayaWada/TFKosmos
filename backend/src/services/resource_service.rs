@@ -198,112 +198,237 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// テストデータ生成用ヘルパー関数
+    mod test_helpers {
+        use serde_json::{json, Value};
+
+        pub fn create_user_resource(name: &str, arn: &str) -> Value {
+            json!({
+                "name": name,
+                "arn": arn
+            })
+        }
+
+        pub fn create_role_resource(name: &str, permissions: Value) -> Value {
+            json!({
+                "name": name,
+                "permissions": permissions
+            })
+        }
+
+        pub fn create_group_resource(name: &str, members: Vec<&str>) -> Value {
+            json!({
+                "name": name,
+                "members": members
+            })
+        }
+    }
+
     #[test]
     fn test_resource_matches_search_string_field() {
-        let resource = json!({
-            "name": "TestUser",
-            "arn": "arn:aws:iam::123456789012:user/TestUser"
-        });
+        // Arrange
+        let resource = test_helpers::create_user_resource(
+            "TestUser",
+            "arn:aws:iam::123456789012:user/TestUser",
+        );
 
-        assert!(ResourceService::resource_matches_search(&resource, "testuser"));
-        assert!(ResourceService::resource_matches_search(&resource, "123456789012"));
-        assert!(!ResourceService::resource_matches_search(&resource, "nonexistent"));
+        // Act & Assert
+        assert!(
+            ResourceService::resource_matches_search(&resource, "testuser"),
+            "名前フィールドで検索がマッチするべき"
+        );
+        assert!(
+            ResourceService::resource_matches_search(&resource, "123456789012"),
+            "ARNフィールドで検索がマッチするべき"
+        );
+        assert!(
+            !ResourceService::resource_matches_search(&resource, "nonexistent"),
+            "存在しない文字列では検索がマッチしないべき"
+        );
     }
 
     #[test]
     fn test_resource_matches_search_case_insensitive() {
+        // Arrange
         // 注意: resource_matches_search は検索語を小文字化しない
         // apply_filters で小文字化されるため、直接呼び出す場合は小文字で渡す
-        let resource = json!({
-            "name": "AdminUser"
-        });
+        let resource = json!({"name": "AdminUser"});
 
-        assert!(ResourceService::resource_matches_search(&resource, "adminuser"));
-        assert!(ResourceService::resource_matches_search(&resource, "admin"));
+        // Act & Assert
+        assert!(
+            ResourceService::resource_matches_search(&resource, "adminuser"),
+            "大文字小文字を区別しない検索がマッチするべき"
+        );
+        assert!(
+            ResourceService::resource_matches_search(&resource, "admin"),
+            "部分一致検索がマッチするべき"
+        );
     }
 
     #[test]
     fn test_resource_matches_search_nested_object() {
-        let resource = json!({
-            "name": "TestRole",
-            "permissions": {
+        // Arrange
+        let resource = test_helpers::create_role_resource(
+            "TestRole",
+            json!({
                 "action": "s3:GetObject",
                 "resource": "*"
-            }
-        });
+            }),
+        );
 
-        assert!(ResourceService::resource_matches_search(&resource, "s3:getobject"));
-        assert!(ResourceService::resource_matches_search(&resource, "testrole"));
+        // Act & Assert
+        assert!(
+            ResourceService::resource_matches_search(&resource, "s3:getobject"),
+            "ネストしたオブジェクトの検索がマッチするべき"
+        );
+        assert!(
+            ResourceService::resource_matches_search(&resource, "testrole"),
+            "トップレベルフィールドの検索がマッチするべき"
+        );
     }
 
     #[test]
     fn test_resource_matches_search_array_field() {
-        let resource = json!({
-            "name": "TestGroup",
-            "members": ["user1", "user2", "admin"]
-        });
+        // Arrange
+        let resource = test_helpers::create_group_resource("TestGroup", vec!["user1", "user2", "admin"]);
 
-        assert!(ResourceService::resource_matches_search(&resource, "user1"));
-        assert!(ResourceService::resource_matches_search(&resource, "admin"));
-        assert!(!ResourceService::resource_matches_search(&resource, "user3"));
+        // Act & Assert
+        assert!(
+            ResourceService::resource_matches_search(&resource, "user1"),
+            "配列フィールドの検索がマッチするべき"
+        );
+        assert!(
+            ResourceService::resource_matches_search(&resource, "admin"),
+            "配列フィールドの別の要素でも検索がマッチするべき"
+        );
+        assert!(
+            !ResourceService::resource_matches_search(&resource, "user3"),
+            "配列に存在しない要素では検索がマッチしないべき"
+        );
     }
 
     #[test]
     fn test_value_contains_search_number() {
+        // Arrange
         let value = json!(12345);
-        assert!(ResourceService::value_contains_search(&value, "123"));
-        assert!(ResourceService::value_contains_search(&value, "12345"));
-        assert!(!ResourceService::value_contains_search(&value, "999"));
+
+        // Act & Assert
+        assert!(
+            ResourceService::value_contains_search(&value, "123"),
+            "数値の部分一致検索がマッチするべき"
+        );
+        assert!(
+            ResourceService::value_contains_search(&value, "12345"),
+            "数値の完全一致検索がマッチするべき"
+        );
+        assert!(
+            !ResourceService::value_contains_search(&value, "999"),
+            "数値に含まれない文字列では検索がマッチしないべき"
+        );
     }
 
     #[test]
     fn test_value_contains_search_boolean() {
+        // Arrange
         let value_true = json!(true);
         let value_false = json!(false);
 
-        assert!(ResourceService::value_contains_search(&value_true, "true"));
-        assert!(ResourceService::value_contains_search(&value_false, "false"));
+        // Act & Assert
+        assert!(
+            ResourceService::value_contains_search(&value_true, "true"),
+            "ブール値trueの検索がマッチするべき"
+        );
+        assert!(
+            ResourceService::value_contains_search(&value_false, "false"),
+            "ブール値falseの検索がマッチするべき"
+        );
+    }
+
+    #[test]
+    fn test_value_contains_search_null() {
+        // Arrange
+        let value = json!(null);
+
+        // Act & Assert
+        assert!(
+            !ResourceService::value_contains_search(&value, "null"),
+            "null値は検索にマッチしないべき"
+        );
     }
 
     #[test]
     fn test_apply_filters_with_search_term() {
+        // Arrange
         let resources = vec![
             json!({"name": "AdminUser", "type": "user"}),
             json!({"name": "TestRole", "type": "role"}),
             json!({"name": "AdminGroup", "type": "group"}),
         ];
-
         let filters = json!({"search": "Admin"});
+
+        // Act
         let result = ResourceService::apply_filters(resources, filters).unwrap();
 
-        assert_eq!(result.len(), 2);
-        assert!(result.iter().any(|r| r["name"] == "AdminUser"));
-        assert!(result.iter().any(|r| r["name"] == "AdminGroup"));
+        // Assert
+        assert_eq!(result.len(), 2, "フィルタ後のリソース数は2であるべき");
+        assert!(
+            result.iter().any(|r| r["name"] == "AdminUser"),
+            "AdminUserがフィルタ結果に含まれるべき"
+        );
+        assert!(
+            result.iter().any(|r| r["name"] == "AdminGroup"),
+            "AdminGroupがフィルタ結果に含まれるべき"
+        );
     }
 
     #[test]
     fn test_apply_filters_empty_search() {
-        let resources = vec![
-            json!({"name": "User1"}),
-            json!({"name": "User2"}),
-        ];
-
+        // Arrange
+        let resources = vec![json!({"name": "User1"}), json!({"name": "User2"})];
         let filters = json!({"search": ""});
+
+        // Act
         let result = ResourceService::apply_filters(resources.clone(), filters).unwrap();
 
-        assert_eq!(result.len(), 2);
+        // Assert
+        assert_eq!(
+            result.len(),
+            2,
+            "空の検索語では全てのリソースが返されるべき"
+        );
     }
 
     #[test]
     fn test_apply_filters_no_match() {
-        let resources = vec![
-            json!({"name": "User1"}),
-            json!({"name": "User2"}),
-        ];
-
+        // Arrange
+        let resources = vec![json!({"name": "User1"}), json!({"name": "User2"})];
         let filters = json!({"search": "nonexistent"});
+
+        // Act
         let result = ResourceService::apply_filters(resources, filters).unwrap();
 
-        assert_eq!(result.len(), 0);
+        // Assert
+        assert_eq!(
+            result.len(),
+            0,
+            "マッチしない検索語では空のリストが返されるべき"
+        );
+    }
+
+    #[test]
+    fn test_apply_filters_without_search_key() {
+        // Arrange
+        let resources = vec![json!({"name": "User1"}), json!({"name": "User2"})];
+        let filters = json!({"other_filter": "value"});
+
+        // Act
+        let result = ResourceService::apply_filters(resources.clone(), filters).unwrap();
+
+        // Assert
+        assert_eq!(
+            result.len(),
+            2,
+            "searchキーがない場合は全てのリソースが返されるべき"
+        );
     }
 }

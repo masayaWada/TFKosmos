@@ -92,40 +92,92 @@ mod tests {
 
     #[test]
     fn test_default_config() {
+        // Arrange & Act
         let config = Config::default();
-        assert_eq!(config.environment, Environment::Development);
-        assert_eq!(config.host, "0.0.0.0");
-        assert_eq!(config.port, 8000);
-        assert!(config.cors_origins.is_empty());
+
+        // Assert
+        assert_eq!(
+            config.environment,
+            Environment::Development,
+            "デフォルト環境はDevelopmentであるべき"
+        );
+        assert_eq!(config.host, "0.0.0.0", "デフォルトホストは0.0.0.0であるべき");
+        assert_eq!(config.port, 8000, "デフォルトポートは8000であるべき");
+        assert!(
+            config.cors_origins.is_empty(),
+            "デフォルトCORSオリジンは空であるべき"
+        );
     }
 
     #[test]
     fn test_is_development() {
+        // Arrange
         let config = Config {
             environment: Environment::Development,
             ..Default::default()
         };
-        assert!(config.is_development());
-        assert!(!config.is_production());
+
+        // Act & Assert
+        assert!(
+            config.is_development(),
+            "Development環境ではis_development()がtrueを返すべき"
+        );
+        assert!(
+            !config.is_production(),
+            "Development環境ではis_production()がfalseを返すべき"
+        );
     }
 
     #[test]
     fn test_is_production() {
+        // Arrange
         let config = Config {
             environment: Environment::Production,
             ..Default::default()
         };
-        assert!(config.is_production());
-        assert!(!config.is_development());
+
+        // Act & Assert
+        assert!(
+            config.is_production(),
+            "Production環境ではis_production()がtrueを返すべき"
+        );
+        assert!(
+            !config.is_development(),
+            "Production環境ではis_development()がfalseを返すべき"
+        );
     }
 
     #[test]
     fn test_bind_address() {
+        // Arrange
         let config = Config {
             host: "127.0.0.1".to_string(),
             port: 3000,
             ..Default::default()
         };
-        assert_eq!(config.bind_address(), "127.0.0.1:3000");
+
+        // Act
+        let bind_address = config.bind_address();
+
+        // Assert
+        assert_eq!(
+            bind_address, "127.0.0.1:3000",
+            "バインドアドレスはhost:port形式であるべき"
+        );
+    }
+
+    #[test]
+    fn test_bind_address_default_values() {
+        // Arrange
+        let config = Config::default();
+
+        // Act
+        let bind_address = config.bind_address();
+
+        // Assert
+        assert_eq!(
+            bind_address, "0.0.0.0:8000",
+            "デフォルト値でのバインドアドレスは0.0.0.0:8000であるべき"
+        );
     }
 }

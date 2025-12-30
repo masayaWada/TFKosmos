@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '../../test/utils';
 import ScanTargetSelector from './ScanTargetSelector';
 
 describe('ScanTargetSelector', () => {
   describe('AWSプロバイダーの場合', () => {
-    const defaultProps = {
+    // テストデータのファクトリー関数
+    const createDefaultProps = (overrides = {}) => ({
       provider: 'aws' as const,
       scanTargets: {
         users: true,
@@ -12,27 +13,40 @@ describe('ScanTargetSelector', () => {
         roles: true,
         policies: false,
         attachments: false,
-        cleanup: false,
       },
       toggleTarget: vi.fn(),
       toggleAllTargets: vi.fn(),
-    };
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
 
     it('AWS用のスキャン対象を全て表示する', () => {
-      render(<ScanTargetSelector {...defaultProps} />);
+      // Arrange
+      const props = createDefaultProps();
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
+
+      // Assert
       expect(screen.getByText('スキャン対象')).toBeInTheDocument();
       expect(screen.getByLabelText(/Users/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Groups/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Roles/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Policies/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Attachments/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Cleanup/)).toBeInTheDocument();
     });
 
     it('チェックボックスの状態が正しく反映される', () => {
-      render(<ScanTargetSelector {...defaultProps} />);
+      // Arrange
+      const props = createDefaultProps();
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
+
+      // Assert
       expect(screen.getByLabelText(/Users/)).toBeChecked();
       expect(screen.getByLabelText(/Groups/)).not.toBeChecked();
       expect(screen.getByLabelText(/Roles/)).toBeChecked();
@@ -40,73 +54,93 @@ describe('ScanTargetSelector', () => {
     });
 
     it('チェックボックスをクリックするとtoggleTargetが呼ばれる', () => {
+      // Arrange
       const toggleTarget = vi.fn();
-      const toggleAllTargets = vi.fn();
-      render(<ScanTargetSelector {...defaultProps} toggleTarget={toggleTarget} toggleAllTargets={toggleAllTargets} />);
+      const props = createDefaultProps({ toggleTarget });
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
       fireEvent.click(screen.getByLabelText(/Groups/));
-      expect(toggleTarget).toHaveBeenCalledWith('groups');
-
       fireEvent.click(screen.getByLabelText(/Users/));
+
+      // Assert
+      expect(toggleTarget).toHaveBeenCalledWith('groups');
       expect(toggleTarget).toHaveBeenCalledWith('users');
+      expect(toggleTarget).toHaveBeenCalledTimes(2);
     });
 
     it('IAM親チェックボックスが表示される', () => {
-      render(<ScanTargetSelector {...defaultProps} />);
+      // Arrange
+      const props = createDefaultProps();
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
+
+      // Assert
       expect(screen.getByLabelText(/IAM/)).toBeInTheDocument();
     });
 
     it('IAM親チェックボックスをクリックするとtoggleAllTargetsが呼ばれる', () => {
+      // Arrange
       const toggleAllTargets = vi.fn();
-      // 一部チェックされている状態
-      render(<ScanTargetSelector {...defaultProps} toggleAllTargets={toggleAllTargets} />);
+      const props = createDefaultProps({ toggleAllTargets });
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
       fireEvent.click(screen.getByLabelText(/IAM/));
+
+      // Assert
       // 一部チェックされているので、クリックすると全部解除（false）
       expect(toggleAllTargets).toHaveBeenCalledWith(false);
+      expect(toggleAllTargets).toHaveBeenCalledTimes(1);
     });
 
     it('全ての子がチェックされている場合、IAM親チェックボックスがチェック状態になる', () => {
-      const allCheckedProps = {
-        ...defaultProps,
+      // Arrange
+      const props = createDefaultProps({
         scanTargets: {
           users: true,
           groups: true,
           roles: true,
           policies: true,
           attachments: true,
-          cleanup: true,
         },
-      };
-      render(<ScanTargetSelector {...allCheckedProps} />);
+      });
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
+
+      // Assert
       expect(screen.getByLabelText(/IAM/)).toBeChecked();
     });
 
     it('全ての子がチェック解除されている場合、IAMをクリックすると全部チェックされる', () => {
+      // Arrange
       const toggleAllTargets = vi.fn();
-      const noneCheckedProps = {
-        ...defaultProps,
+      const props = createDefaultProps({
         scanTargets: {
           users: false,
           groups: false,
           roles: false,
           policies: false,
           attachments: false,
-          cleanup: false,
         },
         toggleAllTargets,
-      };
-      render(<ScanTargetSelector {...noneCheckedProps} />);
+      });
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
       fireEvent.click(screen.getByLabelText(/IAM/));
+
+      // Assert
       expect(toggleAllTargets).toHaveBeenCalledWith(true);
+      expect(toggleAllTargets).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('Azureプロバイダーの場合', () => {
-    const defaultProps = {
+    // テストデータのファクトリー関数
+    const createDefaultProps = (overrides = {}) => ({
       provider: 'azure' as const,
       scanTargets: {
         role_definitions: true,
@@ -114,26 +148,46 @@ describe('ScanTargetSelector', () => {
       },
       toggleTarget: vi.fn(),
       toggleAllTargets: vi.fn(),
-    };
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
 
     it('Azure用のスキャン対象を全て表示する', () => {
-      render(<ScanTargetSelector {...defaultProps} />);
+      // Arrange
+      const props = createDefaultProps();
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
+
+      // Assert
       expect(screen.getByText('スキャン対象')).toBeInTheDocument();
       expect(screen.getByLabelText(/Role Definitions/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Role Assignments/)).toBeInTheDocument();
     });
 
     it('AWS用のスキャン対象は表示されない', () => {
-      render(<ScanTargetSelector {...defaultProps} />);
+      // Arrange
+      const props = createDefaultProps();
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
+
+      // Assert
       expect(screen.queryByLabelText(/Users/)).not.toBeInTheDocument();
       expect(screen.queryByLabelText(/Policies/)).not.toBeInTheDocument();
     });
 
     it('チェックボックスの状態が正しく反映される', () => {
-      render(<ScanTargetSelector {...defaultProps} />);
+      // Arrange
+      const props = createDefaultProps();
 
+      // Act
+      render(<ScanTargetSelector {...props} />);
+
+      // Assert
       expect(screen.getByLabelText(/Role Definitions/)).toBeChecked();
       expect(screen.getByLabelText(/Role Assignments/)).not.toBeChecked();
     });
