@@ -61,5 +61,29 @@
       "Write(~/.aws/*)",
       "Write(~/.ssh/*)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/format-hook.sh {{file_path}}",
+            "statusMessage": "Formatting code..."
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/format-hook.sh {{file_path}}",
+            "statusMessage": "Formatting code..."
+          }
+        ]
+      }
+    ]
   }
 }
