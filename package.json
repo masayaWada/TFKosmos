@@ -2,5 +2,8 @@
   "name": "tfkosmos",
   "version": "0.1.0",
   "description": "TFKosmos - Terraform Code Generator",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@xyflow/react": "^12.10.0"
+  }
 }

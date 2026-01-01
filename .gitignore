@@ -152,3 +152,8 @@ terraform-output/
 # Tauri build artifacts
 deployment/src-tauri/target/
 deployment/src-tauri/Cargo.lock
+
+# Root node_modules (should not exist but exclude just in case)
+/node_modules/
+node_modules/
+package-lock.json
