@@ -1905,3 +1905,111 @@ frontend/
 - 各Phaseは独立して実装可能
 - Phase 4はTerraform CLI依存のため、CLI未インストール環境では機能を無効化する
 - クエリ言語（Phase 2）は将来的にCLI版でも活用可能
+
+---
+
+# サブエージェント管理体制の構築（2026-01-01）
+
+## 完了したタスク
+
+### 1. agents/ ディレクトリ構造の作成
+
+- [x] agents/README.md - サブエージェント管理方針の詳細ドキュメント
+- [x] agents/templates/ - 新規エージェント作成用テンプレート一式
+  - [x] agent-template.md
+  - [x] tools-template.json
+  - [x] model-template.json
+  - [x] tests-template.md
+- [x] docs/用語集.md - プロジェクト用語集（サブエージェント関連用語を追加）
+
+### 2. git-smart-commit エージェント定義一式の作成
+
+- [x] agents/subagents/git-smart-commit/README.md - 使い方・ローカル生成手順
+- [x] agents/subagents/git-smart-commit/agent.md - エージェント仕様（役割・ルール・ワークフロー）
+- [x] agents/subagents/git-smart-commit/tools.json - ツール権限設定
+- [x] agents/subagents/git-smart-commit/model.json - AIモデル設定
+- [x] agents/subagents/git-smart-commit/tests.md - テストケース（10ケース）
+
+### 3. Claude Code ルールファイルの作成
+
+- [x] .claude/rules/agent-management.md - サブエージェント管理のルール・ベストプラクティス
+
+### 4. Git運用体制の整備
+
+- [x] .github/CODEOWNERS - agents/ 配下の変更レビュアー設定
+- [x] .github/PULL_REQUEST_TEMPLATE/agent_template.md - エージェント追加用PRテンプレート
+- [x] .github/pull_request_template.md - 既存テンプレートにagents関連チェック項目を追加
+
+## 今後のタスク
+
+### 優先度: 高
+
+- [ ] git-smart-commit エージェントの実地テスト
+  - [ ] テストケース1-10を実際に試す
+  - [ ] 問題があればagent.mdを修正
+  - [ ] tests.mdに実施結果を記録
+
+- [ ] チームメンバーへの周知
+  - [ ] agents/README.md を共有
+  - [ ] ローカル生成手順のウォークスルー実施
+  - [ ] 質問・フィードバックの収集
+
+### 優先度: 中
+
+- [ ] 追加のサブエージェント検討
+  - [ ] terraform-validator エージェント（Terraform検証専用）
+  - [ ] test-runner エージェント（テスト実行・レポート生成）
+  - [ ] doc-generator エージェント（ドキュメント自動生成）
+
+- [ ] git-smart-commit の機能拡張
+  - [ ] マージコミットのサポート
+  - [ ] Breaking Changes の自動検出
+  - [ ] 関連 Issue の自動リンク（Closes #123等）
+
+### 優先度: 低
+
+- [ ] サブエージェントの自動テストスクリプト作成
+  - [ ] agents/subagents/git-smart-commit/test.sh
+  - [ ] CI/CD パイプラインに統合
+
+- [ ] エージェント定義のバージョン管理強化
+  - [ ] セマンティックバージョニング導入
+  - [ ] CHANGELOG.md の自動生成
+
+## 管理方針の要約
+
+### 基本原則
+
+- **「定義」をGit管理、「実体」はローカル保存**
+  - サブエージェントの実体（バイナリ・生成物）は各PC環境に保存
+  - Gitで管理するのはエージェントの「仕様・定義」のみ
+  - 各メンバーは定義をもとにローカルで再生成
+
+### ディレクトリ構造
+
+```
+agents/
+├── README.md                    # 管理方針・使い方
+├── subagents/                   # サブエージェント定義一覧
+│   └── git-smart-commit/        # 例：git コミット専用エージェント
+│       ├── README.md
+│       ├── agent.md
+│       ├── tools.json
+│       ├── model.json
+│       └── tests.md
+└── templates/                   # 新規エージェント作成用テンプレート
+```
+
+共通情報は以下に配置：
+- `.claude/rules/` - プロジェクト全体のルール
+- `docs/` - ドキュメント（コミット戦略、用語集など）
+
+### 参考リソース
+
+- ChatGPT との会話で決定した方針（個人ローカル運用とチーム共有運用の分離）
+- [agents/README.md](agents/README.md) - サブエージェント管理の詳細
+- [.claude/rules/agent-management.md](.claude/rules/agent-management.md) - Claude Code への指示
+
+---
+
+最終更新: 2026-01-01

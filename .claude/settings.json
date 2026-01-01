@@ -19,6 +19,13 @@
       "Bash(curl:*)",
       "Bash(brew:*)",
       "Bash(gh:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git branch:*)",
+      "Read(./.claude/rules)",
+      "Read(./.claude/agents/**)",
       "Bash(pkill:*)",
       "Bash(lsof:*)",
       "Bash(xargs:*)",
@@ -28,7 +35,6 @@
     "deny": [
       "Bash(rm -rf /:*)",
       "Bash(rm -rf ~:*)",
-      "Bash(rm -rf *:*)",
       "Bash(rm -rf .:*)",
       "Bash(rm -rf ..:*)",
       "Bash(sudo rm:*)",
@@ -52,8 +58,8 @@
       "Write(./.env)",
       "Write(./backend/.env)",
       "Write(./frontend/.env)",
-      "Write(~/.aws/**)",
-      "Write(~/.ssh/**)"
+      "Write(~/.aws/*)",
+      "Write(~/.ssh/*)"
     ]
   }
 }

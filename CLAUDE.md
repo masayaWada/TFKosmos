@@ -89,10 +89,12 @@ tfkosmos/
 
 詳細なコーディング規約、テストガイドライン、アーキテクチャ情報は `.claude/rules/` ディレクトリにトピック別に配置されています：
 
-- `coding-standards.md` - コーディング規約と命名規則
+- `coding-standards.md` - コーディング規約と命名規則（Serena MCP利用ガイドライン含む）
 - `build-and-lint.md` - コンパイルチェックとLint
 - `testing-guidelines.md` - テストコード作成ガイドライン
 - `architecture.md` - アーキテクチャと技術スタック
+- `commit-strategy.md` - コミットメッセージ規約とブランチ戦略
+- `agent-management.md` - サブエージェント管理
 - `task-management.md` - タスク管理
 
 ## ドキュメント
