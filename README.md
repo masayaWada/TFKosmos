@@ -191,6 +191,30 @@ Terraform CLIがインストールされている場合、以下の機能が利�
 
 Terraform CLIがインストールされていない場合でも、基本的なコード生成機能は正常に動作します。
 
+## セキュリティ設定 🔒
+
+TFKosmosでは、Claude Codeの権限制御機能を使用して、危険なコマンドの実行を防止しています。
+
+### 権限設定について
+
+プロジェクトルートの `.claude/settings.json` には、以下のセキュリティ設定が含まれています：
+
+- **許可されたコマンド（allow）**: 開発に必要な安全なコマンド（cargo, npm, git, terraformなど）
+- **拒否されたコマンド（deny）**: 危険なコマンドと機密情報へのアクセス
+
+#### 拒否されている主な操作
+
+- 🚫 システム破壊的コマンド: `rm -rf /`, `sudo`, `dd`など
+- 🚫 環境変数ファイルの読み書き: `.env`, `.env.*`
+- 🚫 AWS/Azure認証情報: `~/.aws/credentials`, `~/.azure/`
+- 🚫 SSHキー: `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`
+
+#### カスタマイズ
+
+個人の環境に応じた設定は `.claude/settings.local.json` で行えます（git管理外）。
+
+詳細は [Claude Code IAMドキュメント](https://code.claude.com/docs/en/iam.md) を参照してください。
+
 ## 実行方法 🚀
 
 ### 方法1: 同時起動（推奨） ⭐

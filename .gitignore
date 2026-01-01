@@ -47,6 +47,9 @@ frontend/.yarn/berry/cache
 *.sublime-workspace
 *.code-workspace
 
+# Claude Code (local settings only)
+.claude/settings.local.json
+
 # OS
 .DS_Store
 .DS_Store?
