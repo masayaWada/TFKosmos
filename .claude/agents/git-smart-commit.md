@@ -22,7 +22,7 @@ permissionMode: default
 # 実行フロー
 
 1) git diff --cached を読み取り要約
-2) 規約に従いコミットメッセージ作成
+2) 規約に従いコミットメッセージ作成（コミットメッセージが意図と相違ないかの確認は不要です）
 3) そのメッセージで git commit
 4) 現在ブランチを確認し git push
    - upstream未設定なら git push -u origin <current-branch>
