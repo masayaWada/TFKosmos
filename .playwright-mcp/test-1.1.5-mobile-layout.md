@@ -1,0 +1,57 @@
+### Page state
+- Page URL: http://localhost:5173/connection
+- Page Title: TFKosmos
+- Page Snapshot:
+```yaml
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e5]:
+      - img "TFKosmos" [ref=e6]
+      - heading "TFKosmos" [level=2] [ref=e7]
+    - list [ref=e8]:
+      - listitem [ref=e9]:
+        - link "接続設定" [active] [ref=e10] [cursor=pointer]:
+          - /url: /connection
+      - listitem [ref=e11]:
+        - link "スキャン" [ref=e12] [cursor=pointer]:
+          - /url: /scan
+      - listitem [ref=e13]:
+        - link "テンプレート" [ref=e14] [cursor=pointer]:
+          - /url: /templates
+  - main [ref=e15]:
+    - generic [ref=e133]:
+      - heading "接続設定" [level=1] [ref=e134]
+      - paragraph [ref=e135]: AWSまたはAzureへの接続設定を行い、接続をテストしてください。
+      - generic [ref=e136]:
+        - generic [ref=e137]:
+          - button "AWS" [ref=e138] [cursor=pointer]
+          - button "Azure" [ref=e139] [cursor=pointer]
+        - generic [ref=e140]:
+          - heading "AWS接続設定" [level=2] [ref=e141]
+          - generic [ref=e142]:
+            - heading "aws login（推奨）" [level=3] [ref=e143]
+            - paragraph [ref=e144]: ブラウザベースの認証により、アクセスキーを保存せずにセキュアに接続できます。 AWS CLI v2.32.0以降が必要です。
+            - generic [ref=e145]:
+              - generic [ref=e146]: プロファイル（オプション）
+              - textbox "default" [ref=e147]
+              - text: 空欄の場合はデフォルトプロファイルを使用
+            - generic [ref=e148]:
+              - generic [ref=e149]: AWSリージョン（オプション）
+              - textbox "ap-northeast-1" [ref=e150]
+              - text: 空欄の場合は既存の設定を使用
+            - button "aws login実行" [ref=e151] [cursor=pointer]
+          - generic [ref=e152]:
+            - heading "従来の方法（アクセスキー使用）" [level=3] [ref=e153]
+            - paragraph [ref=e154]: アクセスキーを使用する場合は、事前にaws configureで設定してください。
+          - generic [ref=e155]:
+            - generic [ref=e156]: プロファイル
+            - textbox "default" [ref=e157]
+            - text: 空欄の場合はデフォルトプロファイルを使用
+          - generic [ref=e158]:
+            - generic [ref=e159]: Assume Role ARN (オプション)
+            - textbox "arn:aws:iam::123456789012:role/AdminRole" [ref=e160]
+          - generic [ref=e161]:
+            - generic [ref=e162]: Session Name (オプション)
+            - textbox "tfkosmos" [ref=e163]
+          - button "接続テスト" [ref=e164] [cursor=pointer]
+```
