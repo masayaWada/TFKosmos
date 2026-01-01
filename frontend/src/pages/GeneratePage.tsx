@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { generateApi, GenerationConfig } from "../api/generate";
 import GenerationConfigForm from "../components/generate/GenerationConfigForm";
 import CodePreview from "../components/generate/CodePreview";
+import ValidationPanel from "../components/generate/ValidationPanel";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorMessage from "../components/common/ErrorMessage";
 import SuccessMessage from "../components/common/SuccessMessage";
@@ -237,6 +238,10 @@ export default function GeneratePage() {
       </div>
 
       {loading && <LoadingSpinner />}
+
+      {generationResult && (
+        <ValidationPanel generationId={generationResult.generation_id} />
+      )}
 
       {generationResult && generationResult.preview && (
         <div style={{ marginTop: "2rem" }}>

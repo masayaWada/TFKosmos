@@ -13,6 +13,7 @@ use tracing::{debug, info, warn};
 use crate::api::error::ApiError;
 use crate::models::GenerationResponse;
 use crate::services::generation_service::GenerationService;
+use crate::services::validation_service::ValidationService;
 
 // In-memory cache for generation results (in production, use Redis or database)
 type GenerationCache = Arc<RwLock<std::collections::HashMap<String, GenerationCacheEntry>>>;
@@ -31,7 +32,11 @@ lazy_static::lazy_static! {
 pub fn router() -> Router {
     Router::new()
         .route("/terraform", post(generate_terraform))
+        .route("/terraform/check", get(check_terraform))
         .route("/:generation_id/download", get(download_generated_files))
+        .route("/:generation_id/validate", post(validate_generation))
+        .route("/:generation_id/format/check", get(check_format))
+        .route("/:generation_id/format", post(format_code))
 }
 
 #[derive(serde::Deserialize)]
@@ -141,4 +146,52 @@ async fn download_generated_files(
         }
         Err(e) => Err(ApiError::Internal(format!("Failed to create ZIP: {}", e))),
     }
+}
+
+async fn check_terraform() -> Result<Json<Value>, ApiError> {
+    let version = ValidationService::check_terraform();
+    Ok(Json(serde_json::json!({
+        "available": version.available,
+        "version": version.version
+    })))
+}
+
+async fn validate_generation(
+    Path(generation_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    ValidationService::validate_generation(&generation_id)
+        .await
+        .map(|result| {
+            Json(serde_json::json!({
+                "valid": result.valid,
+                "errors": result.errors,
+                "warnings": result.warnings
+            }))
+        })
+        .map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+async fn check_format(Path(generation_id): Path<String>) -> Result<Json<Value>, ApiError> {
+    ValidationService::check_format(&generation_id)
+        .await
+        .map(|result| {
+            Json(serde_json::json!({
+                "formatted": result.formatted,
+                "diff": result.diff,
+                "files_changed": result.files_changed
+            }))
+        })
+        .map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+async fn format_code(Path(generation_id): Path<String>) -> Result<Json<Value>, ApiError> {
+    ValidationService::format_code(&generation_id)
+        .await
+        .map(|files| {
+            Json(serde_json::json!({
+                "success": true,
+                "files_formatted": files
+            }))
+        })
+        .map_err(|e| ApiError::Internal(e.to_string()))
 }

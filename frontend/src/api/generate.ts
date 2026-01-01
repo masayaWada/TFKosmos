@@ -16,6 +16,23 @@ export interface GenerationResponse {
   preview?: Record<string, string>;
 }
 
+export interface TerraformStatus {
+  available: boolean;
+  version: string;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface FormatResult {
+  formatted: boolean;
+  diff?: string;
+  files_changed: string[];
+}
+
 export const generateApi = {
   generate: async (
     scanId: string,
@@ -86,5 +103,27 @@ export const generateApi = {
       }
       throw error;
     }
+  },
+
+  checkTerraform: async (): Promise<TerraformStatus> => {
+    const response = await apiClient.get("/generate/terraform/check");
+    return response.data;
+  },
+
+  validate: async (generationId: string): Promise<ValidationResult> => {
+    const response = await apiClient.post(`/generate/${generationId}/validate`);
+    return response.data;
+  },
+
+  checkFormat: async (generationId: string): Promise<FormatResult> => {
+    const response = await apiClient.get(`/generate/${generationId}/format/check`);
+    return response.data;
+  },
+
+  format: async (
+    generationId: string
+  ): Promise<{ success: boolean; files_formatted: string[] }> => {
+    const response = await apiClient.post(`/generate/${generationId}/format`);
+    return response.data;
   },
 };

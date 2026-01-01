@@ -69,6 +69,7 @@ Terraform という共通言語に翻訳し、
 - 🦀 Rust 1.70以上（[rustup](https://rustup.rs/)でインストール）
 - 📦 Node.js 18以上
 - npm または yarn
+- 🏗️ Terraform CLI 1.0以上（検証機能を使用する場合）**オプション**
 
 ### バックエンド（Rust）
 
@@ -125,6 +126,70 @@ cargo run
 cd frontend
 npm install
 ```
+
+### Terraform CLI（オプション） 🏗️
+
+生成されたTerraformコードの検証・フォーマット機能を使用する場合は、Terraform CLIが必要です。
+
+#### インストール方法
+
+##### macOS（Homebrew使用）
+
+```bash
+brew tap hashicorp/tap
+brew install hashicorp/tap/terraform
+```
+
+##### macOS（公式バイナリ）
+
+```bash
+# 最新バージョンをダウンロード
+wget https://releases.hashicorp.com/terraform/1.6.0/terraform_1.6.0_darwin_amd64.zip
+
+# 解凍してインストール
+unzip terraform_1.6.0_darwin_amd64.zip
+sudo mv terraform /usr/local/bin/
+
+# バージョン確認
+terraform version
+```
+
+##### Linux（Debian/Ubuntu）
+
+```bash
+wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update && sudo apt install terraform
+```
+
+##### Windows（Chocolatey使用）
+
+```powershell
+choco install terraform
+```
+
+#### インストール確認
+
+```bash
+terraform version
+```
+
+以下のような出力が表示されれば成功です：
+
+```
+Terraform v1.4.4
+on darwin_amd64
+```
+
+#### 検証機能について
+
+Terraform CLIがインストールされている場合、以下の機能が利用可能になります：
+
+- ✅ **構文検証**: 生成されたTerraformコードの構文エラーをチェック
+- 📐 **フォーマットチェック**: コードのフォーマットが正しいか確認
+- 🔧 **自動フォーマット**: コードを自動的に整形
+
+Terraform CLIがインストールされていない場合でも、基本的なコード生成機能は正常に動作します。
 
 ## 実行方法 🚀
 
