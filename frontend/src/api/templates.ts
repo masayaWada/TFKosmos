@@ -8,6 +8,18 @@ export interface Template {
   user_source: string | null
 }
 
+export interface ValidationError {
+  error_type: 'jinja2' | 'terraform'
+  message: string
+  line?: number
+  column?: number
+}
+
+export interface ValidationResponse {
+  valid: boolean
+  errors: ValidationError[]
+}
+
 export const templatesApi = {
   list: async (): Promise<{ templates: Template[] }> => {
     const response = await apiClient.get('/templates')
@@ -44,6 +56,15 @@ export const templatesApi = {
     const response = await apiClient.post(`/templates/preview/${encodedResourceType}`, {
       content,
       context
+    })
+    return response.data
+  },
+
+  validate: async (resourceType: string, content: string): Promise<ValidationResponse> => {
+    // URL encode the resource type to handle slashes
+    const encodedResourceType = encodeURIComponent(resourceType)
+    const response = await apiClient.post(`/templates/validate/${encodedResourceType}`, {
+      content
     })
     return response.data
   }

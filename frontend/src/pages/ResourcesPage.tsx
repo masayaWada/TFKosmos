@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { resourcesApi } from "../api/resources";
+import { resourcesApi, DependencyGraph as DependencyGraphData } from "../api/resources";
 import ResourceTabs from "../components/resources/ResourceTabs";
 import ResourceTable from "../components/resources/ResourceTable";
 import SelectionSummary from "../components/resources/SelectionSummary";
 import ScanResultSummary from "../components/scan/ScanResultSummary";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorMessage from "../components/common/ErrorMessage";
+import QueryInput from "../components/resources/QueryInput";
+import DependencyGraph from "../components/resources/DependencyGraph";
 
 export default function ResourcesPage() {
   const { scanId } = useParams<{ scanId: string }>();
@@ -21,6 +23,10 @@ export default function ResourcesPage() {
   const [provider, setProvider] = useState<"aws" | "azure" | null>(null);
   const [filterText, setFilterText] = useState("");
   const [showFilter, setShowFilter] = useState(false);
+  const [queryMode, setQueryMode] = useState<'simple' | 'advanced'>('simple');
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [dependencyGraph, setDependencyGraph] = useState<DependencyGraphData | null>(null);
+  const [loadingDependencies, setLoadingDependencies] = useState(false);
 
   const awsTabs = [
     { id: "users", label: "Users" },
@@ -29,11 +35,13 @@ export default function ResourcesPage() {
     { id: "policies", label: "Policies" },
     { id: "attachments", label: "Attachments" },
     { id: "cleanup", label: "Cleanup" },
+    { id: "dependencies", label: "Dependencies" },
   ];
 
   const azureTabs = [
     { id: "role_assignments", label: "Role Assignments" },
     { id: "role_definitions", label: "Role Definitions" },
+    { id: "dependencies", label: "Dependencies" },
   ];
 
   const tabs = provider === "azure" ? azureTabs : awsTabs;
@@ -47,8 +55,12 @@ export default function ResourcesPage() {
 
   useEffect(() => {
     if (scanId) {
-      loadResources();
-      loadSelectedResources();
+      if (activeTab === 'dependencies') {
+        loadDependencies();
+      } else {
+        loadResources();
+        loadSelectedResources();
+      }
     }
   }, [scanId, activeTab, page, filterText]);
 
@@ -61,6 +73,24 @@ export default function ResourcesPage() {
       return () => clearTimeout(timeoutId);
     }
   }, [selectedIds, activeTab]);
+
+  const loadDependencies = async () => {
+    if (!scanId) return;
+    setLoadingDependencies(true);
+    setError(null);
+    try {
+      const result = await resourcesApi.getDependencies(scanId);
+      setDependencyGraph(result);
+    } catch (err: any) {
+      setError(
+        err.response?.data?.detail ||
+          err.message ||
+          "依存関係の取得に失敗しました"
+      );
+    } finally {
+      setLoadingDependencies(false);
+    }
+  };
 
   const loadResources = async () => {
     if (!scanId) return;
@@ -138,6 +168,33 @@ export default function ResourcesPage() {
       // Ignore errors when saving selections
       console.error("Failed to save selected resources:", err);
     }
+  };
+
+  const handleQuery = async (query: string) => {
+    if (!scanId) return;
+    setQueryError(null);
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await resourcesApi.query(scanId, query, {
+        type: activeTab,
+        page: 1,
+        pageSize: 50,
+      });
+      setResources(result.resources || []);
+      setTotalPages(result.total_pages || 1);
+      setTotalCount(result.total || 0);
+      setPage(1);
+    } catch (err: any) {
+      setQueryError(err.response?.data?.detail || err.message || 'クエリ実行エラー');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearQuery = () => {
+    setQueryError(null);
+    loadResources();
   };
 
   const handleSelectionChange = (id: string, selected: boolean) => {
@@ -351,43 +408,73 @@ export default function ResourcesPage() {
             marginBottom: "1rem",
           }}
         >
-          <label
-            style={{
-              display: "block",
-              marginBottom: "0.5rem",
-              fontWeight: "bold",
-            }}
-          >
-            検索フィルタ
-          </label>
-          <input
-            type="text"
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
-            placeholder="リソース名、ARN、IDなどで検索..."
-            style={{
-              width: "100%",
-              maxWidth: "500px",
-              padding: "0.5rem",
-              border: "1px solid #ddd",
-              borderRadius: "4px",
-            }}
-          />
-          {filterText && (
-            <button
-              onClick={() => setFilterText("")}
-              style={{
-                marginLeft: "0.5rem",
-                padding: "0.5rem 1rem",
-                backgroundColor: "#dc3545",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-              }}
-            >
-              クリア
-            </button>
+          <div style={{ marginBottom: '1rem' }}>
+            <label>
+              <input
+                type="radio"
+                checked={queryMode === 'simple'}
+                onChange={() => setQueryMode('simple')}
+              />
+              {' '}シンプル検索
+            </label>
+            <label style={{ marginLeft: '1rem' }}>
+              <input
+                type="radio"
+                checked={queryMode === 'advanced'}
+                onChange={() => setQueryMode('advanced')}
+              />
+              {' '}高度なクエリ
+            </label>
+          </div>
+
+          {queryMode === 'simple' ? (
+            <>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: "0.5rem",
+                  fontWeight: "bold",
+                }}
+              >
+                検索フィルタ
+              </label>
+              <input
+                type="text"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder="リソース名、ARN、IDなどで検索..."
+                style={{
+                  width: "100%",
+                  maxWidth: "500px",
+                  padding: "0.5rem",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                }}
+              />
+              {filterText && (
+                <button
+                  onClick={() => setFilterText("")}
+                  style={{
+                    marginLeft: "0.5rem",
+                    padding: "0.5rem 1rem",
+                    backgroundColor: "#dc3545",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                  }}
+                >
+                  クリア
+                </button>
+              )}
+            </>
+          ) : (
+            <QueryInput
+              onQuery={handleQuery}
+              onClear={handleClearQuery}
+              isLoading={loading}
+              error={queryError || undefined}
+            />
           )}
         </div>
       )}
@@ -397,7 +484,17 @@ export default function ResourcesPage() {
         onTabChange={setActiveTab}
         tabs={tabs}
       >
-        {loading ? (
+        {activeTab === 'dependencies' ? (
+          loadingDependencies ? (
+            <LoadingSpinner />
+          ) : dependencyGraph ? (
+            <DependencyGraph data={dependencyGraph} />
+          ) : (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+              依存関係データがありません
+            </div>
+          )
+        ) : loading ? (
           <LoadingSpinner />
         ) : (
           <>

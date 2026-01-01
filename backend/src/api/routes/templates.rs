@@ -8,14 +8,16 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::api::error::ApiError;
+use crate::models::TemplateValidationResponse;
 use crate::services::template_service::TemplateService;
 
 pub fn router() -> Router {
     Router::new()
         .route("/", get(list_templates))
         // Use wildcard pattern to handle template names with slashes (e.g., aws/cleanup_access_key.tf.j2)
-        // Note: preview route uses a different path structure since catch-all must be at the end
+        // Note: preview and validate routes use a different path structure since catch-all must be at the end
         .route("/preview/*template_name", post(preview_template))
+        .route("/validate/*template_name", post(validate_template))
         .route("/*template_name", get(get_template))
         .route("/*template_name", put(update_template))
         .route("/*template_name", post(create_template))
@@ -93,4 +95,19 @@ async fn preview_template(
         .await
         .map(|preview| Json(json!({ "preview": preview })))
         .map_err(|e| ApiError::Validation(format!("Template preview failed: {}", e)))
+}
+
+#[derive(serde::Deserialize)]
+struct ValidateTemplateRequest {
+    content: String,
+}
+
+async fn validate_template(
+    Path(template_name): Path<String>,
+    Json(request): Json<ValidateTemplateRequest>,
+) -> Result<Json<TemplateValidationResponse>, ApiError> {
+    TemplateService::validate_template(&template_name, &request.content)
+        .await
+        .map(Json)
+        .map_err(|e| ApiError::Internal(e.to_string()))
 }

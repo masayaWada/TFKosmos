@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use crate::models::{ValidationError, TemplateValidationResponse};
 
 pub struct TemplateService;
 
@@ -107,6 +108,45 @@ impl TemplateService {
         env.add_template(template_name, template_content)?;
         let template = env.get_template(template_name)?;
         Ok(template.render(&sample_context)?)
+    }
+
+    /// テンプレートの構文を検証する（レンダリングは行わない）
+    pub async fn validate_template(
+        template_name: &str,
+        template_content: &str,
+    ) -> Result<TemplateValidationResponse> {
+        let mut errors = Vec::new();
+
+        // 1. Jinja2構文チェック（minijinjaでパース）
+        let mut env = minijinja::Environment::new();
+        if let Err(e) = env.add_template(template_name, template_content) {
+            errors.push(ValidationError {
+                error_type: "jinja2".to_string(),
+                message: e.to_string(),
+                line: e.line().map(|l| l as u32),
+                column: None,
+            });
+        }
+
+        // 2. レンダリングテスト（サンプルコンテキストで）
+        if errors.is_empty() {
+            let sample_context = Self::generate_sample_context(template_name);
+            if let Err(e) = env.get_template(template_name)
+                .and_then(|t| t.render(&sample_context))
+            {
+                errors.push(ValidationError {
+                    error_type: "jinja2".to_string(),
+                    message: format!("レンダリングエラー: {}", e),
+                    line: None,
+                    column: None,
+                });
+            }
+        }
+
+        Ok(TemplateValidationResponse {
+            valid: errors.is_empty(),
+            errors,
+        })
     }
 
     fn generate_sample_context(template_name: &str) -> Value {
@@ -245,5 +285,110 @@ impl TemplateService {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_validate_template_valid_jinja2() {
+        // 正しいJinja2テンプレートの検証
+        let template_name = "iam_user.tf.j2";  // generate_sample_context() が認識できる名前に変更
+        let valid_content = r#"
+resource "aws_iam_user" "{{ resource_name }}" {
+  name = "{{ user.user_name }}"
+  path = "{{ user.path }}"
+}
+"#;
+
+        let result = TemplateService::validate_template(template_name, valid_content)
+            .await
+            .unwrap();
+
+        assert!(result.valid, "Valid template should pass validation");
+        assert_eq!(result.errors.len(), 0, "Valid template should have no errors");
+    }
+
+    #[tokio::test]
+    async fn test_validate_template_invalid_jinja2_syntax() {
+        // 不正なJinja2構文（閉じタグがない）
+        let template_name = "iam_user.tf.j2";
+        let invalid_content = r#"
+resource "aws_iam_user" "{{ resource_name" {
+  name = "{{ user.user_name }}"
+}
+"#;
+
+        let result = TemplateService::validate_template(template_name, invalid_content)
+            .await
+            .unwrap();
+
+        assert!(!result.valid, "Invalid template should fail validation");
+        assert!(!result.errors.is_empty(), "Invalid template should have errors");
+        assert_eq!(result.errors[0].error_type, "jinja2");
+    }
+
+    #[tokio::test]
+    async fn test_validate_template_filter_error() {
+        // 存在しないフィルターを使用するテンプレート（エラーになる）
+        let template_name = "iam_user.tf.j2";
+        let content_with_invalid_filter = r#"
+resource "aws_iam_user" "{{ resource_name }}" {
+  name = "{{ user.user_name | nonexistent_filter }}"
+}
+"#;
+
+        let result = TemplateService::validate_template(template_name, content_with_invalid_filter)
+            .await
+            .unwrap();
+
+        // 存在しないフィルターはレンダリングエラーになる
+        assert!(!result.valid, "Template with invalid filter should fail validation");
+        assert!(!result.errors.is_empty(), "Should have rendering errors");
+        assert_eq!(result.errors[0].error_type, "jinja2");
+    }
+
+    #[tokio::test]
+    async fn test_validate_template_empty_content() {
+        // 空のテンプレート
+        let template_name = "iam_user.tf.j2";
+        let empty_content = "";
+
+        let result = TemplateService::validate_template(template_name, empty_content)
+            .await
+            .unwrap();
+
+        // 空のテンプレートは有効とみなす
+        assert!(result.valid, "Empty template should be valid");
+        assert_eq!(result.errors.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_validate_template_complex_valid() {
+        // 複雑だが有効なテンプレート（条件分岐とループを含む）
+        let template_name = "aws/iam_user.tf.j2";
+        let complex_content = r#"
+resource "aws_iam_user" "{{ resource_name }}" {
+  name = "{{ user.user_name }}"
+  path = "{{ user.path }}"
+
+  {% if user.tags %}
+  tags = {
+    {% for key in user.tags %}
+    "{{ key }}" = "{{ user.tags[key] }}"
+    {% endfor %}
+  }
+  {% endif %}
+}
+"#;
+
+        let result = TemplateService::validate_template(template_name, complex_content)
+            .await
+            .unwrap();
+
+        assert!(result.valid, "Complex valid template should pass validation");
+        assert_eq!(result.errors.len(), 0);
     }
 }

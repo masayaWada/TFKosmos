@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::models::ResourceListResponse;
 use crate::services::scan_service::ScanService;
+use crate::infra::query::{Lexer, QueryParser, QueryEvaluator};
 
 // In-memory storage for resource selections (in production, use Redis or database)
 type ResourceSelections = Arc<RwLock<HashMap<String, HashMap<String, Vec<Value>>>>>;
@@ -62,6 +63,85 @@ impl ResourceService {
         let end = (start + page_size as usize).min(total);
         let resources = if start < total {
             all_resources[start..end].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        // Get provider from scan result
+        let provider = scan_data
+            .get("provider")
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string());
+
+        Ok(ResourceListResponse {
+            resources,
+            total,
+            page,
+            page_size,
+            total_pages,
+            provider,
+        })
+    }
+
+    pub async fn query_resources(
+        scan_id: &str,
+        query: &str,
+        resource_type: Option<&str>,
+        page: u32,
+        page_size: u32,
+    ) -> Result<ResourceListResponse> {
+        // Parse query
+        let mut lexer = Lexer::new(query);
+        let tokens = lexer.tokenize()
+            .map_err(|e| anyhow::anyhow!("クエリ構文エラー: {}", e))?;
+
+        let mut parser = QueryParser::new(tokens);
+        let expr = parser.parse()
+            .map_err(|e| anyhow::anyhow!("クエリパースエラー: {}", e))?;
+
+        // Get scan data
+        let scan_data = ScanService::get_scan_data(scan_id)
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Scan not found"))?;
+
+        // Extract resources based on type
+        let mut all_resources: Vec<Value> = Vec::new();
+
+        if let Some(rt) = resource_type {
+            if let Some(resources) = scan_data.get(rt) {
+                if let Some(arr) = resources.as_array() {
+                    all_resources = arr.clone();
+                }
+            }
+        } else {
+            // Get all resource types (excluding metadata fields)
+            if let Some(obj) = scan_data.as_object() {
+                for (key, resources) in obj {
+                    // Skip metadata fields
+                    if key == "provider" || key == "scan_id" || key == "timestamp" {
+                        continue;
+                    }
+                    if let Some(arr) = resources.as_array() {
+                        all_resources.extend(arr.clone());
+                    }
+                }
+            }
+        }
+
+        // Filter using query expression
+        let filtered: Vec<Value> = all_resources
+            .into_iter()
+            .filter(|resource| QueryEvaluator::evaluate(&expr, resource))
+            .collect();
+
+        let total = filtered.len();
+        let total_pages = (total as f64 / page_size as f64).ceil() as u32;
+
+        // Paginate
+        let start = ((page - 1) * page_size) as usize;
+        let end = (start + page_size as usize).min(total);
+        let resources = if start < total {
+            filtered[start..end].to_vec()
         } else {
             Vec::new()
         };

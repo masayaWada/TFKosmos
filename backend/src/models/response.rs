@@ -58,3 +58,42 @@ pub struct AzureResourceGroup {
     pub name: String,
     pub location: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationError {
+    pub error_type: String,  // "jinja2" | "terraform"
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub column: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateValidationResponse {
+    pub valid: bool,
+    pub errors: Vec<ValidationError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DependencyNode {
+    pub id: String,
+    pub node_type: String,  // "user", "group", "role", "policy"
+    pub name: String,
+    pub data: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DependencyEdge {
+    pub source: String,
+    pub target: String,
+    pub edge_type: String,  // "policy_attachment", "group_membership"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DependencyGraph {
+    pub nodes: Vec<DependencyNode>,
+    pub edges: Vec<DependencyEdge>,
+}

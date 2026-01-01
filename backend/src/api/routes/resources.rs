@@ -8,12 +8,15 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::api::error::ApiError;
-use crate::models::ResourceListResponse;
+use crate::models::{DependencyGraph, ResourceListResponse};
+use crate::services::dependency_service::DependencyService;
 use crate::services::resource_service::ResourceService;
 
 pub fn router() -> Router {
     Router::new()
         .route("/:scan_id", get(get_resources))
+        .route("/:scan_id/query", post(query_resources))
+        .route("/:scan_id/dependencies", get(get_dependencies))
         .route("/:scan_id/select", post(select_resources))
         .route("/:scan_id/select", get(get_selected_resources))
 }
@@ -83,4 +86,63 @@ async fn get_selected_resources(Path(scan_id): Path<String>) -> Result<Json<Valu
             }))
         })
         .map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+#[derive(Deserialize)]
+struct QueryResourcesRequest {
+    query: String,
+    #[serde(rename = "type")]
+    resource_type: Option<String>,
+    page: Option<u32>,
+    page_size: Option<u32>,
+}
+
+async fn query_resources(
+    Path(scan_id): Path<String>,
+    Json(request): Json<QueryResourcesRequest>,
+) -> Result<Json<ResourceListResponse>, ApiError> {
+    let page = request.page.unwrap_or(1);
+    let page_size = request.page_size.unwrap_or(50);
+
+    ResourceService::query_resources(
+        &scan_id,
+        &request.query,
+        request.resource_type.as_deref(),
+        page,
+        page_size,
+    )
+    .await
+    .map(Json)
+    .map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("構文エラー") || msg.contains("パースエラー") {
+            ApiError::Validation(msg)
+        } else if msg.contains("not found") {
+            ApiError::NotFound(msg)
+        } else {
+            ApiError::Internal(msg)
+        }
+    })
+}
+
+#[derive(Deserialize)]
+struct GetDependenciesQuery {
+    root_id: Option<String>,
+}
+
+async fn get_dependencies(
+    Path(scan_id): Path<String>,
+    Query(params): Query<GetDependenciesQuery>,
+) -> Result<Json<DependencyGraph>, ApiError> {
+    DependencyService::get_dependencies(&scan_id, params.root_id.as_deref())
+        .await
+        .map(Json)
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("not found") {
+                ApiError::NotFound(msg)
+            } else {
+                ApiError::Internal(msg)
+            }
+        })
 }

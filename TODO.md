@@ -17,29 +17,29 @@
 
 #### バックエンド
 
-- [ ] 1.1 `backend/src/models/mod.rs` に `ValidationError` 型を追加
-- [ ] 1.2 `backend/src/models/mod.rs` に `TemplateValidationResponse` 型を追加
-- [ ] 1.3 `backend/src/services/template_service.rs` に `validate_template()` メソッドを追加
-- [ ] 1.4 `backend/src/api/routes/templates.rs` に `/validate/*template_name` エンドポイントを追加
+- [x] 1.1 `backend/src/models/mod.rs` に `ValidationError` 型を追加
+- [x] 1.2 `backend/src/models/mod.rs` に `TemplateValidationResponse` 型を追加
+- [x] 1.3 `backend/src/services/template_service.rs` に `validate_template()` メソッドを追加
+- [x] 1.4 `backend/src/api/routes/templates.rs` に `/validate/*template_name` エンドポイントを追加
 
 #### フロントエンド
 
-- [ ] 1.5 `frontend/src/api/templates.ts` に `ValidationError`, `ValidationResponse` 型を追加
-- [ ] 1.6 `frontend/src/api/templates.ts` に `validate()` メソッドを追加
-- [ ] 1.7 `frontend/src/components/templates/ValidationErrors.tsx` を新規作成
-- [ ] 1.8 `frontend/src/pages/TemplatesPage.tsx` にバリデーション機能を統合
-  - [ ] 1.8.1 バリデーション用ステート追加 (`validationErrors`, `isValidating`)
-  - [ ] 1.8.2 エディタref追加 (`editorRef`)
-  - [ ] 1.8.3 デバウンス付き `validateContent()` 関数実装
-  - [ ] 1.8.4 `handleEditorChange()` でデバウンスバリデーション呼び出し
-  - [ ] 1.8.5 `handleEditorMount()` でエディタref設定
-  - [ ] 1.8.6 `ValidationErrors` コンポーネント配置
-  - [ ] 1.8.7 Monaco Editor マーカー設定
+- [x] 1.5 `frontend/src/api/templates.ts` に `ValidationError`, `ValidationResponse` 型を追加
+- [x] 1.6 `frontend/src/api/templates.ts` に `validate()` メソッドを追加
+- [x] 1.7 `frontend/src/components/templates/ValidationErrors.tsx` を新規作成
+- [x] 1.8 `frontend/src/pages/TemplatesPage.tsx` にバリデーション機能を統合
+  - [x] 1.8.1 バリデーション用ステート追加 (`validationErrors`, `isValidating`)
+  - [x] 1.8.2 エディタref追加 (`editorRef`)
+  - [x] 1.8.3 デバウンス付き `validateContent()` 関数実装
+  - [x] 1.8.4 `handleEditorChange()` でデバウンスバリデーション呼び出し
+  - [x] 1.8.5 `handleEditorMount()` でエディタref設定
+  - [x] 1.8.6 `ValidationErrors` コンポーネント配置
+  - [x] 1.8.7 Monaco Editor マーカー設定
 
 #### テスト・動作確認
 
-- [ ] 1.9 バックエンド: `validate_template()` の単体テスト作成
-- [ ] 1.10 動作確認: 構文エラーのあるテンプレートでエラー表示確認
+- [x] 1.9 バックエンド: `validate_template()` の単体テスト作成
+- [x] 1.10 動作確認: 構文エラーのあるテンプレートでエラー表示確認
 
 ---
 
@@ -47,54 +47,54 @@
 
 #### バックエンド - クエリ言語モジュール
 
-- [ ] 2.1 `backend/src/infra/query/mod.rs` を新規作成（モジュール定義）
-- [ ] 2.2 `backend/src/infra/query/lexer.rs` を新規作成
-  - [ ] 2.2.1 `Token` 列挙型定義
-  - [ ] 2.2.2 `Operator` 列挙型定義 (Eq, Ne, Like, In)
-  - [ ] 2.2.3 `LogicalOp` 列挙型定義 (And, Or, Not)
-  - [ ] 2.2.4 `Lexer` 構造体実装
-  - [ ] 2.2.5 `tokenize()` メソッド実装
-- [ ] 2.3 `backend/src/infra/query/parser.rs` を新規作成
-  - [ ] 2.3.1 `Expr` 列挙型定義 (Comparison, And, Or, Not)
-  - [ ] 2.3.2 `Value` 列挙型定義 (String, Number, Boolean, Array)
-  - [ ] 2.3.3 `QueryParser` 構造体実装
-  - [ ] 2.3.4 `parse()` メソッド実装
-  - [ ] 2.3.5 `parse_or_expr()`, `parse_and_expr()` 実装
-  - [ ] 2.3.6 `parse_comparison()` 実装
-- [ ] 2.4 `backend/src/infra/query/evaluator.rs` を新規作成
-  - [ ] 2.4.1 `QueryEvaluator` 構造体実装
-  - [ ] 2.4.2 `evaluate()` メソッド実装
-  - [ ] 2.4.3 `get_nested_field()` 実装（ドット記法対応）
-  - [ ] 2.4.4 `compare()` 実装（各演算子の比較ロジック）
-- [ ] 2.5 `backend/src/infra/mod.rs` に `pub mod query;` を追加
+- [x] 2.1 `backend/src/infra/query/mod.rs` を新規作成（モジュール定義）
+- [x] 2.2 `backend/src/infra/query/lexer.rs` を新規作成
+  - [x] 2.2.1 `Token` 列挙型定義
+  - [x] 2.2.2 `Operator` 列挙型定義 (Eq, Ne, Like, In)
+  - [x] 2.2.3 `LogicalOp` 列挙型定義 (And, Or, Not)
+  - [x] 2.2.4 `Lexer` 構造体実装
+  - [x] 2.2.5 `tokenize()` メソッド実装
+- [x] 2.3 `backend/src/infra/query/parser.rs` を新規作成
+  - [x] 2.3.1 `Expr` 列挙型定義 (Comparison, And, Or, Not)
+  - [x] 2.3.2 `Value` 列挙型定義 (String, Number, Boolean, Array)
+  - [x] 2.3.3 `QueryParser` 構造体実装
+  - [x] 2.3.4 `parse()` メソッド実装
+  - [x] 2.3.5 `parse_or_expr()`, `parse_and_expr()` 実装
+  - [x] 2.3.6 `parse_comparison()` 実装
+- [x] 2.4 `backend/src/infra/query/evaluator.rs` を新規作成
+  - [x] 2.4.1 `QueryEvaluator` 構造体実装
+  - [x] 2.4.2 `evaluate()` メソッド実装
+  - [x] 2.4.3 `get_nested_field()` 実装（ドット記法対応）
+  - [x] 2.4.4 `compare()` 実装（各演算子の比較ロジック）
+- [x] 2.5 `backend/src/infra/mod.rs` に `pub mod query;` を追加
 
 #### バックエンド - サービス・API
 
-- [ ] 2.6 `backend/src/services/resource_service.rs` に `query_resources()` メソッドを追加
-- [ ] 2.7 `backend/src/api/routes/resources.rs` に `QueryResourcesRequest` 構造体を追加
-- [ ] 2.8 `backend/src/api/routes/resources.rs` に `POST /:scan_id/query` エンドポイントを追加
+- [x] 2.6 `backend/src/services/resource_service.rs` に `query_resources()` メソッドを追加
+- [x] 2.7 `backend/src/api/routes/resources.rs` に `QueryResourcesRequest` 構造体を追加
+- [x] 2.8 `backend/src/api/routes/resources.rs` に `POST /:scan_id/query` エンドポイントを追加
 
 #### フロントエンド
 
-- [ ] 2.9 `frontend/src/api/resources.ts` に `query()` メソッドを追加
-- [ ] 2.10 `frontend/src/components/resources/QueryInput.tsx` を新規作成
-  - [ ] 2.10.1 クエリ入力フィールド
-  - [ ] 2.10.2 検索/クリアボタン
-  - [ ] 2.10.3 ヘルプ表示トグル
-  - [ ] 2.10.4 エラー表示
-- [ ] 2.11 `frontend/src/pages/ResourcesPage.tsx` にクエリ機能を統合
-  - [ ] 2.11.1 `queryMode` ステート追加
-  - [ ] 2.11.2 `queryError` ステート追加
-  - [ ] 2.11.3 `handleQuery()` 関数実装
-  - [ ] 2.11.4 検索モード切り替えUI追加
-  - [ ] 2.11.5 `QueryInput` コンポーネント配置
+- [x] 2.9 `frontend/src/api/resources.ts` に `query()` メソッドを追加
+- [x] 2.10 `frontend/src/components/resources/QueryInput.tsx` を新規作成
+  - [x] 2.10.1 クエリ入力フィールド
+  - [x] 2.10.2 検索/クリアボタン
+  - [x] 2.10.3 ヘルプ表示トグル
+  - [x] 2.10.4 エラー表示
+- [x] 2.11 `frontend/src/pages/ResourcesPage.tsx` にクエリ機能を統合
+  - [x] 2.11.1 `queryMode` ステート追加
+  - [x] 2.11.2 `queryError` ステート追加
+  - [x] 2.11.3 `handleQuery()` 関数実装
+  - [x] 2.11.4 検索モード切り替えUI追加
+  - [x] 2.11.5 `QueryInput` コンポーネント配置
 
 #### テスト
 
-- [ ] 2.12 バックエンド: レクサーの単体テスト作成
-- [ ] 2.13 バックエンド: パーサーの単体テスト作成
-- [ ] 2.14 バックエンド: エバリュエーターの単体テスト作成
-- [ ] 2.15 動作確認: 各種クエリパターンでフィルタリング確認
+- [x] 2.12 バックエンド: レクサーの単体テスト作成（9テスト全て成功）
+- [x] 2.13 バックエンド: パーサーの単体テスト作成（8テスト全て成功）
+- [x] 2.14 バックエンド: エバリュエーターの単体テスト作成（12テスト全て成功）
+- [x] 2.15 動作確認: 各種クエリパターンでフィルタリング確認（29テスト全て成功）
 
 ---
 
@@ -102,38 +102,42 @@
 
 #### バックエンド
 
-- [ ] 3.1 `backend/src/models/mod.rs` に `DependencyNode` 型を追加
-- [ ] 3.2 `backend/src/models/mod.rs` に `DependencyEdge` 型を追加
-- [ ] 3.3 `backend/src/models/mod.rs` に `DependencyGraph` 型を追加
-- [ ] 3.4 `backend/src/services/dependency_service.rs` を新規作成
-  - [ ] 3.4.1 `DependencyService` 構造体定義
-  - [ ] 3.4.2 `get_dependencies()` メソッド実装
-  - [ ] 3.4.3 `extract_aws_dependencies()` 実装
-  - [ ] 3.4.4 `extract_azure_dependencies()` 実装
-  - [ ] 3.4.5 `filter_by_root()` 実装（BFS/DFSフィルタリング）
-- [ ] 3.5 `backend/src/services/mod.rs` に `pub mod dependency_service;` を追加
-- [ ] 3.6 `backend/src/api/routes/resources.rs` に `GetDependenciesQuery` 構造体を追加
-- [ ] 3.7 `backend/src/api/routes/resources.rs` に `GET /:scan_id/dependencies` エンドポイントを追加
+- [x] 3.1 `backend/src/models/mod.rs` に `DependencyNode` 型を追加
+- [x] 3.2 `backend/src/models/mod.rs` に `DependencyEdge` 型を追加
+- [x] 3.3 `backend/src/models/mod.rs` に `DependencyGraph` 型を追加
+- [x] 3.4 `backend/src/services/dependency_service.rs` を新規作成
+  - [x] 3.4.1 `DependencyService` 構造体定義
+  - [x] 3.4.2 `get_dependencies()` メソッド実装
+  - [x] 3.4.3 `extract_aws_dependencies()` 実装
+  - [x] 3.4.4 `extract_azure_dependencies()` 実装
+  - [x] 3.4.5 `filter_by_root()` 実装（BFS/DFSフィルタリング）
+- [x] 3.5 `backend/src/services/mod.rs` に `pub mod dependency_service;` を追加
+- [x] 3.6 `backend/src/api/routes/resources.rs` に `GetDependenciesQuery` 構造体を追加
+- [x] 3.7 `backend/src/api/routes/resources.rs` に `GET /:scan_id/dependencies` エンドポイントを追加
 
 #### フロントエンド
 
-- [ ] 3.8 `frontend/` で `npm install @xyflow/react` を実行
-- [ ] 3.9 `frontend/src/api/resources.ts` に依存関係用の型を追加
-  - [ ] 3.9.1 `DependencyNode` インターフェース
-  - [ ] 3.9.2 `DependencyEdge` インターフェース
-  - [ ] 3.9.3 `DependencyGraph` インターフェース
-- [ ] 3.10 `frontend/src/api/resources.ts` に `getDependencies()` メソッドを追加
-- [ ] 3.11 `frontend/src/components/resources/DependencyGraph.tsx` を新規作成
-  - [ ] 3.11.1 React Flow初期化
-  - [ ] 3.11.2 ノード色定義（user, group, role, policy）
-  - [ ] 3.11.3 ノード・エッジ変換ロジック
-  - [ ] 3.11.4 凡例表示
-- [ ] 3.12 `frontend/src/pages/ResourcesPage.tsx` に依存関係タブを追加
+- [x] 3.8 `frontend/` で `npm install @xyflow/react` を実行
+- [x] 3.9 `frontend/src/api/resources.ts` に依存関係用の型を追加
+  - [x] 3.9.1 `DependencyNode` インターフェース
+  - [x] 3.9.2 `DependencyEdge` インターフェース
+  - [x] 3.9.3 `DependencyGraph` インターフェース
+- [x] 3.10 `frontend/src/api/resources.ts` に `getDependencies()` メソッドを追加
+- [x] 3.11 `frontend/src/components/resources/DependencyGraph.tsx` を新規作成
+  - [x] 3.11.1 React Flow初期化
+  - [x] 3.11.2 ノード色定義（user, group, role, policy）
+  - [x] 3.11.3 ノード・エッジ変換ロジック
+  - [x] 3.11.4 凡例表示
+- [x] 3.12 `frontend/src/pages/ResourcesPage.tsx` に依存関係タブを追加
 
 #### テスト
 
-- [ ] 3.13 バックエンド: 依存関係抽出ロジックの単体テスト作成
-- [ ] 3.14 動作確認: グラフ表示・インタラクション確認
+- [x] 3.13 バックエンド: 依存関係抽出ロジックの単体テスト作成
+- [x] 3.14 動作確認: グラフ表示・インタラクション確認
+  - [x] バックエンド起動確認（ポート8000）
+  - [x] フロントエンド起動確認（ポート5173）
+  - [x] APIエンドポイント動作確認（GET /api/resources/:scan_id/dependencies）
+  - [x] Dependenciesタブの表示確認（AWS/Azure両対応）
 
 ---
 
@@ -197,13 +201,13 @@
 
 ## 進捗サマリー
 
-| Phase    | 機能                       | 完了タスク | 総タスク | 進捗   |
-| -------- | -------------------------- | ---------- | -------- | ------ |
-| 1        | テンプレートバリデーション | 0          | 10       | 0%     |
-| 2        | カスタムフィルター         | 0          | 15       | 0%     |
-| 3        | 依存関係可視化             | 0          | 14       | 0%     |
-| 4        | インポートプレビュー       | 0          | 13       | 0%     |
-| **合計** |                            | **0**      | **52**   | **0%** |
+| Phase    | 機能                       | 完了タスク | 総タスク | 進捗    |
+| -------- | -------------------------- | ---------- | -------- | ------- |
+| 1        | テンプレートバリデーション | 10         | 10       | 100%    |
+| 2        | カスタムフィルター         | 15         | 15       | 100%    |
+| 3        | 依存関係可視化             | 14         | 14       | 100%    |
+| 4        | インポートプレビュー       | 0          | 13       | 0%      |
+| **合計** |                            | **39**     | **52**   | **75%** |
 
 ---
 

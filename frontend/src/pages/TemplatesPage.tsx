@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
-import { templatesApi, Template } from "../api/templates";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { templatesApi, Template, ValidationError } from "../api/templates";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorMessage from "../components/common/ErrorMessage";
 import SuccessMessage from "../components/common/SuccessMessage";
 import Editor from "@monaco-editor/react";
 import CodePreview from "../components/generate/CodePreview";
+import ValidationErrors from "../components/templates/ValidationErrors";
+import * as monaco from "monaco-editor";
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -19,6 +21,10 @@ export default function TemplatesPage() {
   const [preview, setPreview] = useState<Record<string, string> | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [_isValidating, setIsValidating] = useState(false);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     loadTemplates();
@@ -100,6 +106,57 @@ export default function TemplatesPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // デバウンス付きバリデーション関数
+  const validateContent = useCallback(async (content: string) => {
+    if (!selectedTemplate || !content) return;
+
+    setIsValidating(true);
+    try {
+      const result = await templatesApi.validate(selectedTemplate.resource_type, content);
+      setValidationErrors(result.errors);
+
+      // Monaco Editorにマーカーを設定
+      if (editorRef.current) {
+        const model = editorRef.current.getModel();
+        if (model) {
+          const markers = result.errors
+            .filter((e) => e.line)
+            .map((e) => ({
+              severity: monaco.MarkerSeverity.Error,
+              message: e.message,
+              startLineNumber: e.line!,
+              startColumn: e.column || 1,
+              endLineNumber: e.line!,
+              endColumn: e.column ? e.column + 1 : 1000,
+            }));
+          monaco.editor.setModelMarkers(model, "template-validation", markers);
+        }
+      }
+    } catch (err) {
+      console.error("Validation failed:", err);
+    } finally {
+      setIsValidating(false);
+    }
+  }, [selectedTemplate]);
+
+  // エディタ変更時のハンドラ
+  const handleEditorChange = (value: string | undefined) => {
+    setEditorContent(value || "");
+
+    // デバウンス: 500ms後にバリデーション実行
+    if (validationTimeoutRef.current) {
+      clearTimeout(validationTimeoutRef.current);
+    }
+    validationTimeoutRef.current = setTimeout(() => {
+      validateContent(value || "");
+    }, 500);
+  };
+
+  // エディタマウント時のハンドラ
+  const handleEditorMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
+    editorRef.current = editor;
   };
 
   const handlePreview = async () => {
@@ -231,11 +288,24 @@ export default function TemplatesPage() {
             <div
               style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
             >
+              <ValidationErrors
+                errors={validationErrors}
+                onErrorClick={(error) => {
+                  if (error.line && editorRef.current) {
+                    editorRef.current.revealLineInCenter(error.line);
+                    editorRef.current.setPosition({
+                      lineNumber: error.line,
+                      column: error.column || 1,
+                    });
+                  }
+                }}
+              />
               <Editor
                 height="400px"
                 defaultLanguage="hcl"
                 value={editorContent}
-                onChange={(value) => setEditorContent(value || "")}
+                onChange={handleEditorChange}
+                onMount={handleEditorMount}
                 theme="vs-dark"
               />
               {showPreview && preview && (
