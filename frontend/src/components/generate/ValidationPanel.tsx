@@ -18,6 +18,7 @@ export default function ValidationPanel({ generationId }: Props) {
   const [formatResult, setFormatResult] = useState<FormatResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
+  const [isLoadingTerraform, setIsLoadingTerraform] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,11 +26,14 @@ export default function ValidationPanel({ generationId }: Props) {
   }, []);
 
   const checkTerraform = async () => {
+    setIsLoadingTerraform(true);
     try {
       const status = await generateApi.checkTerraform();
       setTerraformStatus(status);
     } catch (err) {
       setTerraformStatus({ available: false, version: "" });
+    } finally {
+      setIsLoadingTerraform(false);
     }
   };
 
@@ -63,6 +67,24 @@ export default function ValidationPanel({ generationId }: Props) {
     }
   };
 
+  // Show loading state while checking Terraform CLI
+  if (isLoadingTerraform) {
+    return (
+      <div
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: "4px",
+          padding: "1rem",
+          marginTop: "1rem",
+          color: "#666",
+        }}
+      >
+        Terraform CLIを確認中...
+      </div>
+    );
+  }
+
+  // Show error if Terraform CLI is not available
   if (!terraformStatus?.available) {
     return (
       <div

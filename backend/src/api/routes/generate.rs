@@ -6,28 +6,12 @@ use axum::{
     Router,
 };
 use serde_json::Value;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::api::error::ApiError;
 use crate::models::GenerationResponse;
-use crate::services::generation_service::GenerationService;
+use crate::services::generation_service::{GenerationService, GENERATION_CACHE};
 use crate::services::validation_service::ValidationService;
-
-// In-memory cache for generation results (in production, use Redis or database)
-type GenerationCache = Arc<RwLock<std::collections::HashMap<String, GenerationCacheEntry>>>;
-
-#[derive(Clone)]
-#[allow(dead_code)]
-struct GenerationCacheEntry {
-    output_path: String,
-    files: Vec<String>,
-}
-
-lazy_static::lazy_static! {
-    static ref GENERATION_CACHE: GenerationCache = Arc::new(RwLock::new(std::collections::HashMap::new()));
-}
 
 pub fn router() -> Router {
     Router::new()
@@ -85,7 +69,7 @@ async fn generate_terraform(
             );
 
             // Store result in cache
-            let cache_entry = GenerationCacheEntry {
+            let cache_entry = crate::services::generation_service::GenerationCacheEntry {
                 output_path: result.output_path.clone(),
                 files: result.files.clone(),
             };

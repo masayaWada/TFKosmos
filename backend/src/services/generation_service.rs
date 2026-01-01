@@ -2,11 +2,26 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::infra::generators::terraform::TerraformGenerator;
 use crate::models::{GenerationConfig, GenerationResponse};
 use crate::services::scan_service::ScanService;
+
+// In-memory cache for generation results (in production, use Redis or database)
+pub type GenerationCache = Arc<RwLock<HashMap<String, GenerationCacheEntry>>>;
+
+#[derive(Clone)]
+pub struct GenerationCacheEntry {
+    pub output_path: String,
+    pub files: Vec<String>,
+}
+
+lazy_static::lazy_static! {
+    pub static ref GENERATION_CACHE: GenerationCache = Arc::new(RwLock::new(HashMap::new()));
+}
 
 pub struct GenerationService;
 

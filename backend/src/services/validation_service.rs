@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::path::PathBuf;
 
 use crate::infra::terraform::{TerraformCli, FormatResult, ValidationResult, TerraformVersion};
+use crate::services::generation_service::GENERATION_CACHE;
 
 pub struct ValidationService;
 
@@ -16,12 +17,26 @@ impl ValidationService {
 
     /// 生成されたTerraformコードを検証
     pub async fn validate_generation(generation_id: &str) -> Result<ValidationResult> {
-        let output_dir = PathBuf::from(format!("./terraform-output/{}", generation_id));
+        // Get output path from cache to prevent path traversal attacks
+        let cache_entry = GENERATION_CACHE
+            .read()
+            .await
+            .get(generation_id)
+            .cloned();
+
+        let entry = cache_entry.ok_or_else(|| {
+            anyhow::anyhow!(
+                "Generation output not found: {}. The generation may have expired or never existed.",
+                generation_id
+            )
+        })?;
+
+        let output_dir = PathBuf::from(&entry.output_path);
 
         if !output_dir.exists() {
             return Err(anyhow::anyhow!(
-                "Generation output not found: {}",
-                generation_id
+                "Generation output directory does not exist: {}",
+                entry.output_path
             ));
         }
 
@@ -34,12 +49,26 @@ impl ValidationService {
 
     /// フォーマットチェック
     pub async fn check_format(generation_id: &str) -> Result<FormatResult> {
-        let output_dir = PathBuf::from(format!("./terraform-output/{}", generation_id));
+        // Get output path from cache to prevent path traversal attacks
+        let cache_entry = GENERATION_CACHE
+            .read()
+            .await
+            .get(generation_id)
+            .cloned();
+
+        let entry = cache_entry.ok_or_else(|| {
+            anyhow::anyhow!(
+                "Generation output not found: {}. The generation may have expired or never existed.",
+                generation_id
+            )
+        })?;
+
+        let output_dir = PathBuf::from(&entry.output_path);
 
         if !output_dir.exists() {
             return Err(anyhow::anyhow!(
-                "Generation output not found: {}",
-                generation_id
+                "Generation output directory does not exist: {}",
+                entry.output_path
             ));
         }
 
@@ -48,12 +77,26 @@ impl ValidationService {
 
     /// 自動フォーマット
     pub async fn format_code(generation_id: &str) -> Result<Vec<String>> {
-        let output_dir = PathBuf::from(format!("./terraform-output/{}", generation_id));
+        // Get output path from cache to prevent path traversal attacks
+        let cache_entry = GENERATION_CACHE
+            .read()
+            .await
+            .get(generation_id)
+            .cloned();
+
+        let entry = cache_entry.ok_or_else(|| {
+            anyhow::anyhow!(
+                "Generation output not found: {}. The generation may have expired or never existed.",
+                generation_id
+            )
+        })?;
+
+        let output_dir = PathBuf::from(&entry.output_path);
 
         if !output_dir.exists() {
             return Err(anyhow::anyhow!(
-                "Generation output not found: {}",
-                generation_id
+                "Generation output directory does not exist: {}",
+                entry.output_path
             ));
         }
 
@@ -80,11 +123,24 @@ mod tests {
         // テスト用のディレクトリが存在する場合のみ実行
         let test_dir = "./terraform-output/test-validation";
         if std::path::Path::new(test_dir).exists() {
+            // キャッシュにエントリを追加
+            use crate::services::generation_service::{GENERATION_CACHE, GenerationCacheEntry};
+            GENERATION_CACHE.write().await.insert(
+                "test-validation".to_string(),
+                GenerationCacheEntry {
+                    output_path: test_dir.to_string(),
+                    files: vec![],
+                },
+            );
+
             let result = ValidationService::validate_generation("test-validation").await;
             assert!(result.is_ok());
             let validation_result = result.unwrap();
             assert!(validation_result.valid);
             println!("Validation successful");
+
+            // クリーンアップ
+            GENERATION_CACHE.write().await.remove("test-validation");
         } else {
             println!("Test directory not found, skipping test");
         }
@@ -103,12 +159,25 @@ mod tests {
         // テスト用のディレクトリが存在する場合のみ実行
         let test_dir = "./terraform-output/test-validation";
         if std::path::Path::new(test_dir).exists() {
+            // キャッシュにエントリを追加
+            use crate::services::generation_service::{GENERATION_CACHE, GenerationCacheEntry};
+            GENERATION_CACHE.write().await.insert(
+                "test-validation".to_string(),
+                GenerationCacheEntry {
+                    output_path: test_dir.to_string(),
+                    files: vec![],
+                },
+            );
+
             let result = ValidationService::check_format("test-validation").await;
             assert!(result.is_ok());
             let format_result = result.unwrap();
             // フォーマットされているはず
             assert!(format_result.formatted);
             println!("Format check successful: formatted = {}", format_result.formatted);
+
+            // クリーンアップ
+            GENERATION_CACHE.write().await.remove("test-validation");
         } else {
             println!("Test directory not found, skipping test");
         }
@@ -131,6 +200,16 @@ value = "test"
         let mut file = fs::File::create(format!("{}/main.tf", test_dir)).unwrap();
         file.write_all(unformatted.as_bytes()).unwrap();
 
+        // キャッシュにエントリを追加
+        use crate::services::generation_service::{GENERATION_CACHE, GenerationCacheEntry};
+        GENERATION_CACHE.write().await.insert(
+            test_id.clone(),
+            GenerationCacheEntry {
+                output_path: test_dir.clone(),
+                files: vec![],
+            },
+        );
+
         // フォーマット実行
         let result = ValidationService::format_code(&test_id).await;
         assert!(result.is_ok());
@@ -139,6 +218,7 @@ value = "test"
         println!("Formatted files: {:?}", files_formatted);
 
         // クリーンアップ
+        GENERATION_CACHE.write().await.remove(&test_id);
         let _ = fs::remove_dir_all(&test_dir);
     }
 }
