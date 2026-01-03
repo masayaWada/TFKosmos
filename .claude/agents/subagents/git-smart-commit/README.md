@@ -4,17 +4,23 @@
 
 Conventional Commits形式のコミットメッセージを自動生成し、安全なGit操作を支援するサブエージェントです。
 
-**バージョン**: 1.0.0
+**バージョン**: 1.1.0
 **最終更新**: 2026-01-03
 
 ## 主な機能
 
+### 基本機能
 - Git変更内容の自動分析（status, diff, log）
 - type/scope の自動判定
 - Conventional Commits形式のメッセージ生成
 - 機密情報ファイルの検出と警告
 - ユーザー確認プロセスの徹底
 - プロジェクトコミット規約の遵守
+
+### v1.1.0 新機能
+- **マージコミットのサポート**: `MERGE_HEAD` を自動検出し、マージ専用のメッセージ形式を生成
+- **Breaking Changes の自動検出**: API変更やシグネチャ変更を検出し、`BREAKING CHANGE:` フッターを自動追加
+- **関連 Issue の自動リンク**: ブランチ名から Issue 番号を抽出し、`Closes #123`, `Fixes #456` などを自動追加
 
 ## 使用タイミング
 
@@ -61,17 +67,27 @@ Claude Code がこのエージェント定義を自動的に読み込み、適�
 1. Git変更内容の分析
    ├─ git status（ステージング状況）
    ├─ git diff --cached（変更差分）
-   └─ git log --oneline -5（過去のコミット）
+   ├─ git log --oneline -5（過去のコミット）
+   ├─ git rev-parse MERGE_HEAD（マージコミット検出） ★新機能
+   └─ git branch --show-current（Issue番号推測用） ★新機能
    ↓
 2. type/scopeの自動判定
+   ├─ マージコミット判定 ★新機能
    ├─ 変更ファイルパスから scope を推測
    ├─ 変更内容から type を判定
+   ├─ Breaking Changes の検出 ★新機能
+   │  ├─ API シグネチャ変更
+   │  ├─ 公開型・インターフェースの削除
+   │  └─ 必須パラメータの追加
    └─ Conventional Commits 規約に準拠
    ↓
 3. コミットメッセージ生成
    ├─ 件名（50文字以内）
    ├─ 本文（変更内容の詳細）
-   └─ フッター（関連Issue、Co-Authored-By）
+   └─ フッター
+      ├─ Breaking Change（検出時） ★新機能
+      ├─ 関連Issue（ブランチ名から自動抽出） ★新機能
+      └─ Co-Authored-By
    ↓
 4. 機密情報チェック
    ├─ .env ファイルの検出
@@ -80,6 +96,7 @@ Claude Code がこのエージェント定義を自動的に読み込み、適�
    ↓
 5. ユーザー確認
    ├─ 生成されたメッセージを表示
+   ├─ Breaking Change 警告（該当時） ★新機能
    ├─ ユーザーの承認を待つ
    └─ 修正要望があれば再生成
    ↓
@@ -154,4 +171,5 @@ Claude Code がこのエージェント定義を自動的に読み込み、適�
 
 | 日付 | 変更内容 | 変更者 |
 |------|----------|--------|
-| 2026-01-03 | 初版作成 | Claude Sonnet 4.5 |
+| 2026-01-03 | v1.1.0: マージコミット、Breaking Changes検出、Issue自動リンク機能を追加 | Claude Sonnet 4.5 |
+| 2026-01-03 | v1.0.0: 初版作成 | Claude Sonnet 4.5 |

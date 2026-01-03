@@ -442,10 +442,271 @@ feat(backend): AWS IAMスキャン機能の追加
 
 ---
 
+### テストケース11: [正常系] マージコミットのサポート（新機能）
+
+**目的**: マージコミット時のメッセージ生成をテスト
+
+**前提条件**:
+- `git merge feature/150-user-management` 実行後
+- MERGE_HEAD が存在する状態
+- マージ競合がない
+
+**入力**:
+```
+ユーザー: マージをコミット
+```
+
+**期待される動作**:
+1. `git rev-parse -q --verify MERGE_HEAD` でマージ状態を検出
+2. マージ元ブランチ名から Issue #150 を抽出
+3. マージコミット形式のメッセージを生成
+4. ユーザーに確認
+5. 承認後、マージコミット実行
+
+**期待される出力**:
+```
+✅ マージコミットが完了しました
+
+コミット: m1n2o3p
+メッセージ:
+Merge branch 'feature/150-user-management' into main
+
+マージ内容:
+- ユーザー管理機能の追加
+- CRUD操作のAPIエンドポイント実装
+- フロントエンドUIの実装
+
+Closes #150
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+**検証ポイント**:
+- [ ] MERGE_HEAD が適切に検出される
+- [ ] ブランチ名から Issue 番号が抽出される
+- [ ] マージコミット形式のメッセージが生成される
+- [ ] `Closes #150` が自動追加される
+
+**実施結果**:
+- 日付: -
+- 結果: 未実施
+- 備考: v1.1.0 で追加
+
+---
+
+### テストケース12: [正常系] Breaking Changes の自動検出（新機能）
+
+**目的**: API変更時の Breaking Change 検出をテスト
+
+**前提条件**:
+- 公開APIの関数シグネチャが変更されている
+- `src/api/routes/connection.rs` に変更がステージング済み
+
+**入力**:
+```
+ユーザー: コミット
+```
+
+**期待される動作**:
+1. `git diff --cached` で変更内容を分析
+2. 公開関数のシグネチャ変更を検出
+3. Breaking Change と判定
+4. `feat!` または `BREAKING CHANGE:` フッター付きメッセージを生成
+5. ユーザーに警告と確認
+
+**期待される出力**:
+```
+⚠️ Breaking Change が検出されました
+
+検出内容:
+- src/api/routes/connection.rs: test_connection() のシグネチャ変更
+- 必須パラメータ `timeout` が追加されました
+
+✅ コミットが完了しました
+
+コミット: x4y5z6
+メッセージ:
+feat(api)!: 接続テストにタイムアウト機能を追加
+
+- test_connection に timeout パラメータを追加
+- タイムアウト時のエラーハンドリング強化
+- デフォルト値は30秒
+
+BREAKING CHANGE: test_connection() 関数に必須パラメータ `timeout` が追加されました。
+既存のコードは `test_connection(config, Duration::from_secs(30))` のように
+timeout 引数を追加する必要があります。
+
+Closes #250
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+**検証ポイント**:
+- [ ] API変更が適切に検出される
+- [ ] Breaking Change 警告が表示される
+- [ ] `feat!` または `BREAKING CHANGE:` フッターが含まれる
+- [ ] 変更内容の詳細が記載される
+
+**実施結果**:
+- 日付: -
+- 結果: 未実施
+- 備考: v1.1.0 で追加
+
+---
+
+### テストケース13: [正常系] Issue番号の自動リンク（新機能）
+
+**目的**: ブランチ名から Issue 番号を自動抽出してリンクするテスト
+
+**前提条件**:
+- ブランチ名: `feature/180-terraform-generator`
+- 変更がステージング済み
+
+**入力**:
+```
+ユーザー: コミット
+```
+
+**期待される動作**:
+1. `git branch --show-current` で現在のブランチ名取得
+2. ブランチ名から Issue #180 を抽出
+3. type が `feat` なので `Closes #180` を自動追加
+4. メッセージ生成してユーザーに確認
+
+**期待される出力**:
+```
+✅ コミットが完了しました
+
+コミット: p9q8r7
+メッセージ:
+feat(backend): Terraformコード生成機能の実装
+
+- IAMリソースからTerraformコードを生成
+- minijinja テンプレートエンジンの統合
+- カスタムテンプレートのサポート
+
+Closes #180
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+**検証ポイント**:
+- [ ] ブランチ名から Issue 番号が抽出される
+- [ ] type に応じた適切なキーワードが使用される（feat → Closes, fix → Fixes）
+- [ ] フッターに Issue リンクが含まれる
+
+**実施結果**:
+- 日付: -
+- 結果: 未実施
+- 備考: v1.1.0 で追加
+
+---
+
+### テストケース14: [エッジケース] マージコミット + Breaking Change
+
+**目的**: マージコミットに Breaking Change が含まれる場合のテスト
+
+**前提条件**:
+- マージコミット中（MERGE_HEAD 存在）
+- マージ元ブランチに Breaking Change が含まれる
+
+**入力**:
+```
+ユーザー: マージをコミット
+```
+
+**期待される動作**:
+1. マージコミットと検出
+2. Breaking Change も検出
+3. 両方の情報を含むメッセージ生成
+4. ユーザーに警告と確認
+
+**期待される出力**:
+```
+⚠️ Breaking Change を含むマージコミットです
+
+Merge branch 'feature/200-api-v2' into main
+
+マージ内容:
+- API v2 の実装
+- 認証方式の変更
+
+BREAKING CHANGE: 認証APIが OAuth 2.0 から OpenID Connect に変更されました。
+
+Closes #200
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+**検証ポイント**:
+- [ ] マージコミットと Breaking Change が両方検出される
+- [ ] 適切な警告が表示される
+- [ ] メッセージに両方の情報が含まれる
+
+**実施結果**:
+- 日付: -
+- 結果: 未実施
+- 備考: v1.1.0 で追加
+
+---
+
+### テストケース15: [エッジケース] Issue番号が複数パターンで存在
+
+**目的**: ブランチ名とコミットメッセージ両方に Issue 番号がある場合のテスト
+
+**前提条件**:
+- ブランチ名: `feature/100-main-feature`
+- ユーザーが「#101, #102 も関連」と指示
+
+**入力**:
+```
+ユーザー: #101, #102 も関連するのでコミット
+```
+
+**期待される動作**:
+1. ブランチ名から #100 を抽出
+2. ユーザー指示から #101, #102 を抽出
+3. 複数の Issue 番号を適切にリンク
+
+**期待される出力**:
+```
+feat(backend): メイン機能の実装
+
+- 主要機能の実装
+
+Closes #100
+Relates to #101, #102
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+**検証ポイント**:
+- [ ] 複数の Issue 番号が抽出される
+- [ ] 適切なキーワードで分類される（Closes, Relates to）
+- [ ] 重複が排除される
+
+**実施結果**:
+- 日付: -
+- 結果: 未実施
+- 備考: v1.1.0 で追加、将来の拡張機能
+
+---
+
 ## 回帰テストチェックリスト
 
 エージェントを更新した際に、以下のチェックリストを使用して回帰テストを実施します。
 
+### 基本機能テスト
 - [x] テストケース1: 新機能追加のコミット
 - [ ] テストケース2: バグ修正のコミット
 - [x] テストケース3: 機密ファイルが含まれる場合
@@ -456,6 +717,13 @@ feat(backend): AWS IAMスキャン機能の追加
 - [ ] テストケース8: 大量ファイル変更
 - [ ] テストケース9: Git リポジトリでない
 - [ ] テストケース10: ユーザーがメッセージを修正
+
+### v1.1.0 新機能テスト
+- [ ] テストケース11: マージコミットのサポート
+- [ ] テストケース12: Breaking Changes の自動検出
+- [ ] テストケース13: Issue番号の自動リンク
+- [ ] テストケース14: マージコミット + Breaking Change
+- [ ] テストケース15: Issue番号が複数パターンで存在
 
 ## パフォーマンステスト
 
@@ -485,10 +753,12 @@ feat(backend): AWS IAMスキャン機能の追加
 
 | 日付 | 実施者 | バージョン | 結果 | 備考 |
 |------|-------|-----------|------|------|
+| 2026-01-03 | Claude Sonnet 4.5 | v1.1.0 | 📝 計画段階 | 新機能のテストケースを追加 |
 | 2026-01-03 | Claude Sonnet 4.5 | v1.0.0 | ⚠️ 一部未実施 | テストケース1,3のみ実施 |
 
 ## 更新履歴
 
 | 日付 | 変更内容 | 変更者 |
 |------|----------|--------|
+| 2026-01-03 | v1.1.0 新機能のテストケースを追加（TC11-15） | Claude Sonnet 4.5 |
 | 2026-01-03 | 初版作成 | Claude Sonnet 4.5 |

@@ -3,7 +3,7 @@
 ## 概要
 
 **エージェント名**: git-smart-commit
-**バージョン**: 1.0.0
+**バージョン**: 1.1.0
 **作成日**: 2026-01-03
 **最終更新日**: 2026-01-03
 
@@ -17,6 +17,9 @@
 - Conventional Commits形式のメッセージ生成
 - 機密情報ファイルの検出と警告
 - ユーザー確認プロセスの徹底
+- **マージコミットの自動検出とメッセージ生成**
+- **Breaking Changes の自動検出と BREAKING CHANGE フッター追加**
+- **関連 Issue の自動リンク（ブランチ名やコミットメッセージから推測）**
 
 **対象タスク**:
 - ユーザーからのコミット指示処理
@@ -97,22 +100,36 @@
 git status
 git diff --cached
 git log --oneline -5
+git rev-parse -q --verify MERGE_HEAD  # マージコミット検出用
+git branch --show-current              # 現在のブランチ名取得（Issue番号推測用）
 ```
 
 **期待される出力**:
 - ステージングされたファイルのリスト
 - 変更差分の詳細
 - 過去のコミット履歴（スタイル参考用）
+- マージコミット状態の有無
+- 現在のブランチ名
 
 **エラーハンドリング**:
 - Gitリポジトリでない場合: エラーメッセージを表示して終了
 - ステージング済みファイルがない場合: ユーザーに確認
+
+**新機能: マージコミット検出**:
+- `MERGE_HEAD` が存在する場合、マージコミット中と判断
+- マージ元・マージ先ブランチ名を取得
+- 特別なマージコミットメッセージを生成
+
+**新機能: Issue番号の推測**:
+- ブランチ名から Issue 番号を抽出（例: `feature/123-add-feature` → `#123`）
+- パターン: `feature/{issue-number}-{description}`, `fix/{issue-number}-{description}`
 
 #### ステップ2: type/scopeの自動判定
 
 **目的**: Conventional Commits の type と scope を自動判定
 
 **type の判定ロジック**:
+- マージコミット → `merge` または元のブランチの type を継承
 - 新規ファイル追加 → `feat`
 - バグ修正関連の変更 → `fix`
 - ドキュメントのみの変更 → `docs`
@@ -129,6 +146,28 @@ git log --oneline -5
 - `.github/**` → `ci` または `config`
 - `deployment/**` → `deployment`
 
+**新機能: Breaking Changes 検出**:
+以下のパターンを検出した場合、Breaking Change として判定：
+
+1. **API変更の検出**:
+   - 公開関数・メソッドのシグネチャ変更
+   - 公開型・インターフェースの削除
+   - 必須パラメータの追加
+
+2. **コミットメッセージパターン**:
+   - `BREAKING CHANGE:` を含むメッセージ
+   - `!` を type の後に含む（例: `feat!:`, `fix!:`）
+
+3. **ファイル変更の分析**:
+   - `src/api/` 内の公開APIの変更
+   - メジャーバージョン番号の更新（`Cargo.toml`, `package.json`）
+   - データベーススキーマの変更
+
+**Breaking Change 検出時の動作**:
+- フッターに `BREAKING CHANGE:` セクションを自動追加
+- 変更内容の詳細を記載
+- ユーザーに確認を求める
+
 **エラーハンドリング**:
 - 判定が困難な場合: ユーザーに質問
 
@@ -136,7 +175,7 @@ git log --oneline -5
 
 **目的**: Conventional Commits形式のメッセージを生成
 
-**形式**:
+**基本形式**:
 ```
 <type>(<scope>): <subject>
 
@@ -145,15 +184,47 @@ git log --oneline -5
 <footer>
 ```
 
+**マージコミットの特別形式**:
+```
+Merge branch '<source-branch>' into <target-branch>
+
+マージ内容:
+- <変更の概要>
+
+Closes #<issue-number>
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
 **生成ルール**:
 - 件名（subject）: 50文字以内、命令形、日本語
 - 本文（body）: 変更内容の詳細を箇条書き
 - フッター（footer）:
-  - 関連Issue: `Closes #123`
-  - Claude Code生成タグ: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
-  - Co-Author: `Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>`
+  - **Breaking Changes**: `BREAKING CHANGE: <詳細>`（検出時のみ）
+  - **関連Issue**: `Closes #123`, `Fixes #456`, `Relates to #789`
+  - **Claude Code生成タグ**: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
+  - **Co-Author**: `Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>`
 
-**例**:
+**新機能: Issue番号の自動リンク**:
+以下の方法で Issue 番号を特定し、フッターに追加：
+
+1. **ブランチ名からの抽出**:
+   - `feature/123-add-feature` → `Closes #123`
+   - `fix/456-bug-fix` → `Fixes #456`
+   - `docs/789-update-readme` → `Relates to #789`
+
+2. **コミットメッセージ内のパターン検出**:
+   - ユーザーが入力した説明内の `#123` を検出
+   - `issue 123`, `Issue #123` などを正規化
+
+3. **自動判定ロジック**:
+   - type が `feat` → `Closes #`（機能完了を意味）
+   - type が `fix` → `Fixes #`（バグ修正を意味）
+   - type が `docs`, `refactor`, `test` → `Relates to #`（関連として記載）
+
+**例1: 通常のコミット**:
 ```
 feat(backend): AWS IAMスキャン機能の追加
 
@@ -162,6 +233,41 @@ feat(backend): AWS IAMスキャン機能の追加
 - フィルタリング機能を追加
 
 Closes #10
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+**例2: Breaking Change を含むコミット**:
+```
+feat(api)!: 認証APIの刷新
+
+- OAuth 2.0 から OpenID Connect に変更
+- トークンフォーマットの変更
+- 旧APIエンドポイントの廃止
+
+BREAKING CHANGE: 認証方式が変更されました。クライアントアプリケーションは
+新しい OpenID Connect フローに対応する必要があります。詳細はマイグレーション
+ガイド（docs/migration-to-oidc.md）を参照してください。
+
+Closes #200
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+**例3: マージコミット**:
+```
+Merge branch 'feature/150-user-management' into main
+
+マージ内容:
+- ユーザー管理機能の追加
+- CRUD操作のAPIエンドポイント実装
+- フロントエンドUIの実装
+
+Closes #150
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -364,6 +470,118 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 コミットは中断されました。
 ```
 
+### 例3: マージコミット（新機能）
+
+**入力**:
+```
+ユーザー: マージをコミットして
+（git merge feature/150-user-management 実行後）
+```
+
+**エージェントの動作**:
+1. `git rev-parse -q --verify MERGE_HEAD` でマージコミット中と判断
+2. マージ元ブランチ名から Issue #150 を抽出
+3. マージコミット形式のメッセージを生成
+4. ユーザーに確認
+5. 承認後、コミット実行
+
+**出力**:
+```
+✅ マージコミットが完了しました
+
+コミット: m1n2o3p
+メッセージ:
+Merge branch 'feature/150-user-management' into main
+
+マージ内容:
+- ユーザー管理機能の追加
+- CRUD操作のAPIエンドポイント実装
+- フロントエンドUIの実装
+
+Closes #150
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+### 例4: Breaking Change の自動検出（新機能）
+
+**入力**:
+```
+ユーザー: コミットして
+（API のシグネチャを変更した変更がステージング済み）
+```
+
+**エージェントの動作**:
+1. `git diff --cached` で API 変更を検出
+2. 公開関数のシグネチャ変更を確認
+3. Breaking Change と判定
+4. `feat!` または `BREAKING CHANGE:` フッター付きメッセージを生成
+5. ユーザーに警告と確認
+
+**出力**:
+```
+⚠️ Breaking Change が検出されました
+
+検出内容:
+- src/api/routes/connection.rs: test_connection() のシグネチャ変更
+- 必須パラメータ `timeout` が追加されました
+
+✅ コミットが完了しました
+
+コミット: x4y5z6
+メッセージ:
+feat(api)!: 接続テストにタイムアウト機能を追加
+
+- test_connection に timeout パラメータを追加
+- タイムアウト時のエラーハンドリング強化
+- デフォルト値は30秒
+
+BREAKING CHANGE: test_connection() 関数に必須パラメータ `timeout` が追加されました。
+既存のコードは `test_connection(config, Duration::from_secs(30))` のように
+timeout 引数を追加する必要があります。
+
+Closes #250
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+### 例5: Issue 番号の自動リンク（新機能）
+
+**入力**:
+```
+ユーザー: コミットして
+（ブランチ名: feature/180-terraform-generator）
+```
+
+**エージェントの動作**:
+1. `git branch --show-current` で現在のブランチ名取得
+2. ブランチ名から Issue #180 を抽出
+3. type が `feat` なので `Closes #180` を自動追加
+4. メッセージ生成してユーザーに確認
+
+**出力**:
+```
+✅ コミットが完了しました
+
+コミット: p9q8r7
+メッセージ:
+feat(backend): Terraformコード生成機能の実装
+
+- IAMリソースからTerraformコードを生成
+- minijinja テンプレートエンジンの統合
+- カスタムテンプレートのサポート
+
+Closes #180
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
 ## パフォーマンス考慮事項
 
 - **推奨モデル**: `sonnet` (高速・コスト効率重視)
@@ -377,13 +595,18 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 2. バイナリファイルの変更内容は分析できない
 3. 過去のコミットスタイルが一貫していない場合、判定精度が低下する
 
+## 実装済み機能（v1.1.0）
+
+- [x] マージコミットのサポート
+- [x] Breaking Changes の自動検出
+- [x] 関連 Issue の自動リンク（Closes #123等）
+
 ## 今後の拡張予定
 
-- [ ] マージコミットのサポート
-- [ ] Breaking Changes の自動検出
-- [ ] 関連 Issue の自動リンク（Closes #123等）
 - [ ] コミットメッセージのテンプレート機能
 - [ ] 多言語対応（英語メッセージの選択肢）
+- [ ] 複数Issue参照のサポート（Closes #123, #456）
+- [ ] Semantic Versioning の自動提案
 
 ## 参考リソース
 
@@ -395,4 +618,5 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 | バージョン | 日付 | 変更内容 | 変更者 |
 |-----------|------|----------|--------|
+| 1.1.0 | 2026-01-03 | マージコミット対応、Breaking Changes 検出、Issue 自動リンク機能を追加 | Claude Sonnet 4.5 |
 | 1.0.0 | 2026-01-03 | 初版作成 | Claude Sonnet 4.5 |
