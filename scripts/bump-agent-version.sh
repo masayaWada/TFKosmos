@@ -53,8 +53,8 @@ if [ ! -f "$VERSION_FILE" ]; then
     exit 1
 fi
 
-# 現在のバージョンを取得
-CURRENT_VERSION=$(grep -oP '"version":\s*"\K[^"]+' "$VERSION_FILE")
+# 現在のバージョンを取得（クロスプラットフォーム対応）
+CURRENT_VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$VERSION_FILE")
 echo "現在のバージョン: $CURRENT_VERSION"
 
 # バージョン番号を分解
@@ -87,13 +87,14 @@ TODAY=$(date +%Y-%m-%d)
 echo "新しいバージョン: $NEW_VERSION"
 echo "リリース日: $TODAY"
 
-# version.json を更新
+# version.json を更新（descriptionを保持）
+OLD_DESCRIPTION=$(sed -n 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$VERSION_FILE")
 cat > "$VERSION_FILE" <<EOF
 {
   "version": "$NEW_VERSION",
   "released": "$TODAY",
   "status": "stable",
-  "description": "$(grep -oP '"description":\s*"\K[^"]+' "$VERSION_FILE")"
+  "description": "$OLD_DESCRIPTION"
 }
 EOF
 
@@ -104,11 +105,14 @@ if [ -f "$CHANGELOG_FILE" ]; then
     # 一時ファイルに新しいエントリを作成
     TEMP_FILE=$(mktemp)
 
-    # CHANGELOGのヘッダーをコピー
-    sed -n '1,/## \[Unreleased\]/p' "$CHANGELOG_FILE" > "$TEMP_FILE"
+    # ## [Unreleased] セクションの有無を確認
+    if grep -q "^## \[Unreleased\]" "$CHANGELOG_FILE"; then
+        # [Unreleased] セクションが存在する場合
+        # CHANGELOGのヘッダーと[Unreleased]セクションまでをコピー
+        sed -n '1,/^## \[Unreleased\]/p' "$CHANGELOG_FILE" > "$TEMP_FILE"
 
-    # 新しいバージョンエントリを追加
-    cat >> "$TEMP_FILE" <<EOF
+        # 新しいバージョンエントリを追加
+        cat >> "$TEMP_FILE" <<EOF
 
 ## [$NEW_VERSION] - $TODAY
 
@@ -117,8 +121,27 @@ if [ -f "$CHANGELOG_FILE" ]; then
 
 EOF
 
-    # 既存のバージョン履歴を追加
-    sed -n '/## \[.*\] - [0-9]/,$p' "$CHANGELOG_FILE" >> "$TEMP_FILE"
+        # [Unreleased]以降の既存バージョン履歴を追加（[Unreleased]セクション自体は除外）
+        sed -n '/^## \[Unreleased\]/,${/^## \[Unreleased\]/!p;}' "$CHANGELOG_FILE" | \
+        sed -n '/^## \[[0-9]/,$p' >> "$TEMP_FILE"
+    else
+        # [Unreleased] セクションが存在しない場合
+        # ヘッダー（最初のバージョンエントリまで）をコピー
+        sed -n '1,/^## \[/p' "$CHANGELOG_FILE" | sed '$d' > "$TEMP_FILE"
+
+        # 新しいバージョンエントリを追加
+        cat >> "$TEMP_FILE" <<EOF
+
+## [$NEW_VERSION] - $TODAY
+
+### Changed
+- $DESCRIPTION
+
+EOF
+
+        # 既存のバージョン履歴を追加
+        sed -n '/^## \[[0-9]/,$p' "$CHANGELOG_FILE" >> "$TEMP_FILE"
+    fi
 
     # CHANGELOGを更新
     mv "$TEMP_FILE" "$CHANGELOG_FILE"
@@ -131,10 +154,19 @@ fi
 # README.md の更新履歴テーブルも更新（存在する場合）
 README_FILE="$AGENT_DIR/README.md"
 if [ -f "$README_FILE" ] && grep -q "## 更新履歴" "$README_FILE"; then
-    # 更新履歴テーブルに新しい行を追加
-    sed -i '' "/^| 日付 | 変更内容 | 変更者 |/a\\
-| $TODAY | v$NEW_VERSION: $DESCRIPTION | Claude Sonnet 4.5 |
-" "$README_FILE"
+    # クロスプラットフォーム対応: 一時ファイルを使用
+    TEMP_README=$(mktemp)
+    awk -v date="$TODAY" -v ver="$NEW_VERSION" -v desc="$DESCRIPTION" '
+        /^\| 日付 \| 変更内容 \| 変更者 \|/ {
+            print
+            getline  # ヘッダー区切り行（|---|---|---|）を読み込む
+            print
+            print "| " date " | v" ver ": " desc " | Claude Sonnet 4.5 |"
+            next
+        }
+        { print }
+    ' "$README_FILE" > "$TEMP_README"
+    mv "$TEMP_README" "$README_FILE"
     echo "✅ README.md の更新履歴を更新しました"
 fi
 
