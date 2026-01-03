@@ -1,0 +1,87 @@
+{
+  "description": "git-smart-commit エージェント推奨AIモデル設定",
+  "recommended_model": "sonnet",
+  "model_options": {
+    "sonnet": {
+      "use_case": "推奨 - 高速・コスト効率重視",
+      "description": "git-smart-commit エージェントには sonnet が最適。高速で正確なコミットメッセージ生成が可能。",
+      "suitable_for": [
+        "定型的なコミットメッセージ生成",
+        "Git変更内容の分析",
+        "type/scopeの自動判定",
+        "リアルタイム性が重要",
+        "コスト効率を重視"
+      ],
+      "limitations": [
+        "非常に複雑なリファクタリングの説明には不向きな場合がある"
+      ]
+    },
+    "opus": {
+      "use_case": "高精度が必要な場合のみ",
+      "description": "非常に複雑な変更内容の説明が必要な場合に使用。通常は sonnet で十分。",
+      "suitable_for": [
+        "大規模リファクタリング",
+        "複雑なアーキテクチャ変更",
+        "Breaking Changes の詳細説明"
+      ],
+      "limitations": [
+        "レスポンスが遅い（sonnetの約2-3倍）",
+        "コストが高い（sonnetの約5倍）",
+        "通常のコミットには過剰"
+      ]
+    },
+    "haiku": {
+      "use_case": "非推奨",
+      "description": "コミットメッセージ生成には精度が不足する可能性があるため非推奨。",
+      "suitable_for": [
+        "使用を推奨しない"
+      ],
+      "limitations": [
+        "コミットメッセージの品質が低い",
+        "type/scopeの判定精度が劣る",
+        "プロジェクト規約への準拠が不十分"
+      ]
+    }
+  },
+  "selection_criteria": {
+    "use_sonnet_if": [
+      "通常のコミット（推奨デフォルト）",
+      "バグ修正",
+      "機能追加",
+      "ドキュメント更新",
+      "リファクタリング（中規模まで）"
+    ],
+    "use_opus_if": [
+      "大規模リファクタリング（100ファイル以上）",
+      "アーキテクチャの大幅変更",
+      "Breaking Changes を含む変更",
+      "非常に詳細な説明が必要な場合"
+    ],
+    "use_haiku_if": [
+      "使用を推奨しない"
+    ]
+  },
+  "performance_notes": {
+    "sonnet": {
+      "avg_response_time": "2-3秒",
+      "avg_tokens": "1,000-2,000",
+      "cost_per_commit": "低"
+    },
+    "opus": {
+      "avg_response_time": "5-8秒",
+      "avg_tokens": "2,000-4,000",
+      "cost_per_commit": "高"
+    },
+    "haiku": {
+      "avg_response_time": "1-2秒",
+      "avg_tokens": "500-1,000",
+      "cost_per_commit": "非常に低（ただし品質も低い）"
+    }
+  },
+  "notes": [
+    "デフォルトは sonnet を強く推奨（バランスが良い）",
+    "99%のコミットは sonnet で十分",
+    "opus は本当に必要な場合のみ使用（コストに注意）",
+    "haiku は使用しない（品質が不十分）"
+  ]
+}

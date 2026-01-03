@@ -1,0 +1,148 @@
+{
+  "description": "エージェントが使用可能なツールの権限設定",
+  "tools": {
+    "Bash": {
+      "description": "Shell コマンドの実行",
+      "permissions": [
+        {
+          "pattern": "git status",
+          "level": "read-only",
+          "description": "Git ステータスの確認"
+        },
+        {
+          "pattern": "git diff*",
+          "level": "read-only",
+          "description": "Git 差分の確認"
+        },
+        {
+          "pattern": "git log*",
+          "level": "read-only",
+          "description": "Git ログの確認"
+        }
+      ],
+      "denied": [
+        {
+          "pattern": "rm -rf*",
+          "reason": "ファイル削除は禁止"
+        },
+        {
+          "pattern": "sudo*",
+          "reason": "管理者権限での実行は禁止"
+        },
+        {
+          "pattern": "git push --force*",
+          "reason": "強制プッシュは禁止"
+        }
+      ]
+    },
+    "Read": {
+      "description": "ファイル読み込み",
+      "permissions": [
+        {
+          "pattern": "**/*.md",
+          "level": "read-only",
+          "description": "Markdownファイルの読み込み"
+        },
+        {
+          "pattern": "**/*.json",
+          "level": "read-only",
+          "description": "JSONファイルの読み込み"
+        }
+      ],
+      "denied": [
+        {
+          "pattern": "**/.env*",
+          "reason": "環境変数ファイルへのアクセス禁止"
+        },
+        {
+          "pattern": "**/credentials*",
+          "reason": "認証情報ファイルへのアクセス禁止"
+        },
+        {
+          "pattern": "**/*.key",
+          "reason": "秘密鍵ファイルへのアクセス禁止"
+        }
+      ]
+    },
+    "Write": {
+      "description": "ファイル書き込み",
+      "permissions": [
+        {
+          "pattern": "**/*.md",
+          "level": "write",
+          "description": "Markdownファイルの書き込み（ユーザー確認後）"
+        }
+      ],
+      "denied": [
+        {
+          "pattern": "**/.env*",
+          "reason": "環境変数ファイルの書き込み禁止"
+        },
+        {
+          "pattern": "**/package.json",
+          "reason": "依存関係ファイルの直接編集禁止"
+        }
+      ]
+    },
+    "Edit": {
+      "description": "ファイル編集",
+      "permissions": [
+        {
+          "pattern": "**/*.md",
+          "level": "edit",
+          "description": "Markdownファイルの編集（ユーザー確認後）"
+        }
+      ],
+      "denied": [
+        {
+          "pattern": "**/.env*",
+          "reason": "環境変数ファイルの編集禁止"
+        }
+      ]
+    },
+    "Glob": {
+      "description": "ファイル検索",
+      "permissions": [
+        {
+          "pattern": "**/*",
+          "level": "read-only",
+          "description": "全ファイルの検索可能"
+        }
+      ],
+      "denied": []
+    },
+    "Grep": {
+      "description": "ファイル内容検索",
+      "permissions": [
+        {
+          "pattern": "**/*",
+          "level": "read-only",
+          "description": "全ファイルの内容検索可能"
+        }
+      ],
+      "denied": [
+        {
+          "pattern": "**/.env*",
+          "reason": "環境変数ファイルの検索禁止"
+        }
+      ]
+    },
+    "AskUserQuestion": {
+      "description": "ユーザーへの質問",
+      "permissions": [
+        {
+          "pattern": "*",
+          "level": "always-allowed",
+          "description": "常にユーザーに質問可能"
+        }
+      ],
+      "denied": []
+    }
+  },
+  "notes": [
+    "必要最小限のツールのみ許可する（権限の最小化原則）",
+    "機密情報へのアクセスは明示的に拒否する",
+    "破壊的操作は必ずユーザー確認を経由する",
+    "Read-only で済む場合は Write/Edit 権限を与えない"
+  ]
+}

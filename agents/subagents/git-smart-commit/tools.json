@@ -1,0 +1,161 @@
+{
+  "description": "git-smart-commit エージェントが使用可能なツールの権限設定",
+  "tools": {
+    "Bash": {
+      "description": "Git コマンドの実行",
+      "permissions": [
+        {
+          "pattern": "git status*",
+          "level": "read-only",
+          "description": "Git ステータスの確認"
+        },
+        {
+          "pattern": "git diff*",
+          "level": "read-only",
+          "description": "Git 差分の確認"
+        },
+        {
+          "pattern": "git log*",
+          "level": "read-only",
+          "description": "Git ログの確認"
+        },
+        {
+          "pattern": "git add*",
+          "level": "execute",
+          "description": "ファイルのステージング（ユーザー確認後）"
+        },
+        {
+          "pattern": "git commit -m*",
+          "level": "execute",
+          "description": "コミット実行（ユーザー確認後）"
+        },
+        {
+          "pattern": "git rm --cached*",
+          "level": "execute",
+          "description": "ステージング解除（機密ファイル対処用）"
+        }
+      ],
+      "denied": [
+        {
+          "pattern": "git push --force*",
+          "reason": "強制プッシュは禁止"
+        },
+        {
+          "pattern": "git push -f*",
+          "reason": "強制プッシュは禁止"
+        },
+        {
+          "pattern": "git reset --hard*",
+          "reason": "破壊的リセットは禁止"
+        },
+        {
+          "pattern": "rm -rf*",
+          "reason": "ファイル削除は禁止"
+        },
+        {
+          "pattern": "sudo*",
+          "reason": "管理者権限での実行は禁止"
+        }
+      ]
+    },
+    "Read": {
+      "description": "ルールファイルの読み込み",
+      "permissions": [
+        {
+          "pattern": ".claude/rules/commit-strategy.md",
+          "level": "read-only",
+          "description": "コミット規約の参照"
+        },
+        {
+          "pattern": ".claude/rules/coding-standards.md",
+          "level": "read-only",
+          "description": "コーディング規約の参照"
+        },
+        {
+          "pattern": "docs/用語集.md",
+          "level": "read-only",
+          "description": "用語集の参照"
+        }
+      ],
+      "denied": [
+        {
+          "pattern": "**/.env*",
+          "reason": "環境変数ファイルへのアクセス禁止"
+        },
+        {
+          "pattern": "**/credentials*",
+          "reason": "認証情報ファイルへのアクセス禁止"
+        },
+        {
+          "pattern": "**/*.key",
+          "reason": "秘密鍵ファイルへのアクセス禁止"
+        },
+        {
+          "pattern": "**/*.pem",
+          "reason": "秘密鍵ファイルへのアクセス禁止"
+        }
+      ]
+    },
+    "Glob": {
+      "description": "ファイル検索（機密ファイル検出用）",
+      "permissions": [
+        {
+          "pattern": "**/*",
+          "level": "read-only",
+          "description": "全ファイルの検索可能"
+        }
+      ],
+      "denied": []
+    },
+    "Grep": {
+      "description": "ファイル内容検索（変更内容分析用）",
+      "permissions": [
+        {
+          "pattern": "**/*",
+          "level": "read-only",
+          "description": "全ファイルの内容検索可能（機密ファイル除く）"
+        }
+      ],
+      "denied": [
+        {
+          "pattern": "**/.env*",
+          "reason": "環境変数ファイルの検索禁止"
+        },
+        {
+          "pattern": "**/credentials*",
+          "reason": "認証情報ファイルの検索禁止"
+        }
+      ]
+    },
+    "AskUserQuestion": {
+      "description": "ユーザーへの確認",
+      "permissions": [
+        {
+          "pattern": "*",
+          "level": "always-allowed",
+          "description": "常にユーザーに質問可能"
+        }
+      ],
+      "denied": []
+    }
+  },
+  "confidential_file_patterns": [
+    "**/.env",
+    "**/.env.*",
+    "**/credentials",
+    "**/credentials.*",
+    "**/*.key",
+    "**/*.pem",
+    "**/secrets.*",
+    "**/.aws/credentials",
+    "**/.ssh/id_rsa",
+    "**/.ssh/id_ed25519"
+  ],
+  "notes": [
+    "必要最小限のツールのみ許可する（権限の最小化原則）",
+    "機密情報へのアクセスは明示的に拒否する",
+    "破壊的操作は必ずユーザー確認を経由する",
+    "Read-only で済む場合は Execute 権限を与えない",
+    "git commit 実行前に必ずユーザー承認を得る"
+  ]
+}
