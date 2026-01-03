@@ -5,10 +5,10 @@
 ## 優先度: 中
 
 ### エージェント検討
-- [ ] 追加のエージェント検討
-  - [ ] terraform-validator エージェント（Terraform検証専用）
-  - [ ] test-runner エージェント（テスト実行・レポート生成）
-  - [ ] doc-generator エージェント（ドキュメント自動生成）
+- [x] 追加のエージェント検討
+  - [x] terraform-validator エージェント（Terraform検証専用）
+  - [x] test-runner エージェント（テスト実行・レポート生成）
+  - [x] doc-generator エージェント（ドキュメント自動生成）
 
 - [ ] git-smart-commit の機能拡張
   - [ ] マージコミットのサポート
