@@ -70,6 +70,8 @@ agents/
    - `model.json`: タスクの複雑度に応じたモデル選択（デフォルトはsonnet）
    - `tests.md`: 想定ケースと期待結果を記述
    - `README.md`: ローカル生成手順とトラブルシューティング
+   - `version.json`: バージョン情報（初期値は 0.1.0）
+   - `CHANGELOG.md`: 変更履歴（テンプレートから作成）
 
 3. **プロジェクトルールの参照**
    - エージェント定義内で `.claude/rules/` 配下のルールを参照
@@ -79,6 +81,79 @@ agents/
    - ブランチ名: `agents/feature/<agent-name>`
    - PRテンプレート: `.github/PULL_REQUEST_TEMPLATE/agent_template.md` を使用
    - レビュアー承認後、マージ
+
+## バージョン管理
+
+エージェントのバージョン管理は [Semantic Versioning 2.0.0](https://semver.org/) に準拠します。
+
+### バージョン更新方法
+
+#### 自動更新（推奨）
+
+バージョン更新スクリプトを使用：
+
+```bash
+# マイナーバージョンアップ（機能追加）
+./scripts/bump-agent-version.sh <agent-name> minor "変更内容の説明"
+
+# パッチバージョンアップ（バグ修正）
+./scripts/bump-agent-version.sh <agent-name> patch "バグ修正の説明"
+
+# メジャーバージョンアップ（破壊的変更）
+./scripts/bump-agent-version.sh <agent-name> major "破壊的変更の説明"
+```
+
+**例**:
+```bash
+./scripts/bump-agent-version.sh git-smart-commit minor "マージコミット機能の追加"
+```
+
+スクリプトは以下を自動的に実行します：
+- `version.json` の更新
+- `CHANGELOG.md` への新しいエントリ追加
+- `README.md` の更新履歴テーブルの更新
+
+#### 手動更新
+
+1. **version.json の更新**
+   ```json
+   {
+     "version": "1.2.0",
+     "released": "2026-01-03",
+     "status": "stable",
+     "description": "エージェントの説明"
+   }
+   ```
+
+2. **CHANGELOG.md の更新**
+   ```markdown
+   ## [1.2.0] - 2026-01-03
+
+   ### Added
+   - 新機能の説明
+   ```
+
+3. **README.md の更新履歴テーブルの更新**
+
+### セマンティックバージョニングの原則
+
+- **MAJOR (x.0.0)**: 破壊的変更
+  - ツールの削除、必須パラメータの追加、動作の根本的な変更
+- **MINOR (0.x.0)**: 後方互換性のある機能追加
+  - 新機能の追加、オプションパラメータの追加
+- **PATCH (0.0.x)**: 後方互換性のあるバグ修正
+  - バグ修正、ドキュメント修正、内部リファクタリング
+
+### CHANGELOG 形式
+
+[Keep a Changelog](https://keepachangelog.com/) 形式に従います：
+
+- **Added**: 新機能
+- **Changed**: 既存機能の変更
+- **Deprecated**: 非推奨になった機能
+- **Removed**: 削除された機能
+- **Fixed**: バグ修正
+- **Security**: セキュリティ関連の変更
 
 ## エージェント作成のベストプラクティス
 

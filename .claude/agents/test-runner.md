@@ -1,5 +1,8 @@
 ---
 name: test-runner
+version: 1.0.0
+released: 2026-01-03
+status: stable
 description: バックエンド（Rust）、フロントエンド（TypeScript）、E2E（Playwright）のテスト実行、結果分析、レポート生成を行う。テストコードは変更しない（Read-only）。
 tools: Read, Glob, Grep, Bash, mcp__playwright__*
 model: sonnet

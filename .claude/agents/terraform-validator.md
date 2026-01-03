@@ -1,5 +1,8 @@
 ---
 name: terraform-validator
+version: 1.0.0
+released: 2026-01-03
+status: stable
 description: 生成されたTerraformコードの検証（terraform validate/fmt）を実行し、エラーや警告をレポート。コードは変更しない（Read-only）。
 tools: Read, Bash, Grep
 model: sonnet

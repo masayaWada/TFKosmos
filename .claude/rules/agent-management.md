@@ -56,9 +56,72 @@
    - `tools.json` の権限設定を見直し
    - `tests.md` に新規テストケースを追加
 
-2. **バージョン管理**
-   - README.md の更新履歴に記録
-   - 破壊的変更の場合、チームに周知
+2. **バージョン管理（セマンティックバージョニング）**
+
+   エージェントのバージョンは [Semantic Versioning 2.0.0](https://semver.org/) に準拠します。
+
+   **バージョン番号の形式**: `MAJOR.MINOR.PATCH`
+
+   - **MAJOR**: 破壊的変更（互換性のない変更）
+     - 例: ツールの削除、必須パラメータの追加、動作の根本的な変更
+   - **MINOR**: 後方互換性のある機能追加
+     - 例: 新機能の追加、オプションパラメータの追加
+   - **PATCH**: 後方互換性のあるバグ修正
+     - 例: バグ修正、ドキュメント修正、内部リファクタリング
+
+   **バージョン更新の手順**:
+
+   a. **自動更新スクリプトの使用（推奨）**
+   ```bash
+   # マイナーバージョンアップ（機能追加）
+   ./scripts/bump-agent-version.sh git-smart-commit minor "マージコミット機能の追加"
+
+   # パッチバージョンアップ（バグ修正）
+   ./scripts/bump-agent-version.sh git-smart-commit patch "バグ修正"
+
+   # メジャーバージョンアップ（破壊的変更）
+   ./scripts/bump-agent-version.sh git-smart-commit major "API変更"
+   ```
+
+   b. **手動更新（ディレクトリ構造のエージェント）**
+   - `version.json` のバージョン番号とリリース日を更新
+   - `CHANGELOG.md` に変更内容を記録
+   - `README.md` の更新履歴テーブルに新しいエントリを追加
+
+   c. **手動更新（単一ファイル形式のエージェント）**
+   - YAMLフロントマターの `version` と `released` フィールドを更新
+   - ファイル末尾の更新履歴セクションに新しいエントリを追加
+
+   **CHANGELOG.md の記載方法**:
+
+   [Keep a Changelog](https://keepachangelog.com/) 形式に従います。
+
+   ```markdown
+   ## [1.2.0] - 2026-01-03
+
+   ### Added
+   - 新機能の説明
+
+   ### Changed
+   - 変更内容の説明
+
+   ### Deprecated
+   - 非推奨になった機能
+
+   ### Removed
+   - 削除された機能
+
+   ### Fixed
+   - 修正されたバグ
+
+   ### Security
+   - セキュリティ関連の変更
+   ```
+
+   **破壊的変更の場合**:
+   - チームに周知し、移行ガイドを提供
+   - CHANGELOG に `BREAKING CHANGE:` セクションを追加
+   - 関連するドキュメントを更新
 
 3. **回帰テスト**
    - `tests.md` の全ケースを再テスト

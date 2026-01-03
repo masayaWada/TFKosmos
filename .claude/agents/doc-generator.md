@@ -1,5 +1,8 @@
 ---
 name: doc-generator
+version: 1.0.0
+released: 2026-01-03
+status: stable
 description: コードベースからAPIドキュメント、アーキテクチャ図、README、設計書などを自動生成。既存ドキュメントの分析と更新提案も行う。
 tools: Read, Glob, Grep, Bash, mcp__serena__*
 model: sonnet
