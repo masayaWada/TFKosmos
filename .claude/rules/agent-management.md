@@ -8,15 +8,15 @@
 
 - **サブエージェントの実体（バイナリ・生成物）**: 各開発者のローカル環境に保存
 - **Git管理対象**: エージェントの「仕様・定義」のみ
-  - `agents/subagents/<agent-name>/agent.md` - エージェント仕様
-  - `agents/subagents/<agent-name>/tools.json` - 許可ツールと権限
-  - `agents/subagents/<agent-name>/model.json` - 推奨AIモデル
-  - `agents/subagents/<agent-name>/tests.md` - テストケース
-  - `agents/subagents/<agent-name>/README.md` - 使い方・生成手順
+  - `.claude/agents/subagents/<agent-name>/agent.md` - エージェント仕様
+  - `.claude/agents/subagents/<agent-name>/tools.json` - 許可ツールと権限
+  - `.claude/agents/subagents/<agent-name>/model.json` - 推奨AIモデル
+  - `.claude/agents/subagents/<agent-name>/tests.md` - テストケース
+  - `.claude/agents/subagents/<agent-name>/README.md` - 使い方・生成手順
 
 ### 個人運用とチーム共有の分離
 
-- **チーム共有エージェント**: `agents/subagents/` 配下で管理
+- **チーム共有エージェント**: `.claude/agents/subagents/` 配下で管理
 - **個人専用エージェント**: ローカルのみ保存（`.gitignore` で除外）
 - **プロジェクト共通情報**: `.claude/rules/` および `docs/` で管理
 
@@ -28,7 +28,7 @@
 
 1. **テンプレートのコピー**
    ```bash
-   cp -r agents/templates/ agents/subagents/<agent-name>/
+   cp -r .claude/agents/templates/ .claude/agents/subagents/<agent-name>/
    ```
 
 2. **定義ファイルの編集**
@@ -69,7 +69,7 @@
 サブエージェントを呼び出す場合：
 
 1. **定義の確認**
-   - `agents/subagents/<agent-name>/agent.md` を読み込み
+   - `.claude/agents/subagents/<agent-name>/agent.md` を読み込み
    - エージェントの役割・ルール・制約を理解
 
 2. **ツール権限の遵守**
@@ -106,7 +106,7 @@
 - `git push --force` などの危険コマンド禁止
 - main/master ブランチへの直接コミット時は警告
 
-**詳細**: `agents/subagents/git-smart-commit/README.md`
+**詳細**: `.claude/agents/subagents/git-smart-commit/README.md`
 
 ## エージェント作成のベストプラクティス
 
@@ -158,13 +158,13 @@
   1. プロジェクトルールの参照
      - コミット前に以下を読み込み:
        - `.claude/rules/coding-standards.md`
-       - `agents/prompts/shared-snippets.md`
+       - `.claude/agents/prompts/shared-snippets.md`
   ```
 
 ## エージェント定義の優先順位
 
 1. **`.claude/rules/**`** - プロジェクト全体のルール（最優先）
-2. **`agents/subagents/<agent-name>/agent.md`** - エージェント固有のルール
+2. **`.claude/agents/subagents/<agent-name>/agent.md`** - エージェント固有のルール
 3. **`docs/**`** - プロジェクトドキュメント（コミット戦略、用語集など）
 
 矛盾がある場合、上位の優先順位に従う。
@@ -190,7 +190,7 @@
 ### Q1: エージェントが期待通りに動作しない
 
 **対処法**:
-1. `agents/subagents/<agent-name>/agent.md` を再読み込み
+1. `.claude/agents/subagents/<agent-name>/agent.md` を再読み込み
 2. `tools.json` の権限設定を確認
 3. `.claude/rules/` のルールと矛盾していないか確認
 
@@ -204,13 +204,13 @@
 ### Q3: 新規エージェントの追加方法がわからない
 
 **対処法**:
-1. `agents/templates/` をコピー
-2. `agents/README.md` の手順に従う
+1. `.claude/agents/templates/` をコピー
+2. `.claude/agents/README.md` の手順に従う
 3. PR作成時は `.github/PULL_REQUEST_TEMPLATE/agent_template.md` を使用
 
 ## 関連ドキュメント
 
-- [agents/README.md](../../agents/README.md) - サブエージェント管理の詳細
+- [.claude/agents/README.md](../ agents/README.md) - サブエージェント管理の詳細
 - [commit-strategy.md](./commit-strategy.md) - コミット規約
 - [docs/用語集.md](../../docs/用語集.md) - プロジェクト用語集
 - [.github/CODEOWNERS](../../.github/CODEOWNERS) - レビュアー設定
@@ -220,4 +220,5 @@
 
 | 日付 | 変更内容 | 変更者 |
 |------|----------|--------|
+| 2026-01-03 | エージェント管理を`agents/`から`.claude/agents/`に移行 | @wadamasaya |
 | 2026-01-01 | 初版作成 | @wadamasaya |
