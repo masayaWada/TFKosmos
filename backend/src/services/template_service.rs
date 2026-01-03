@@ -189,7 +189,15 @@ impl TemplateService {
                 "policy": {
                     "policy_name": "example-policy",
                     "path": "/",
-                    "policy_document": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Resource\":\"*\"}]}"
+                    "policy_version": "2012-10-17",
+                    "statements": [
+                        {
+                            "sid": "AllowS3Read",
+                            "effect": "Allow",
+                            "actions": ["s3:GetObject", "s3:ListBucket"],
+                            "resources": ["arn:aws:s3:::example-bucket/*", "arn:aws:s3:::example-bucket"]
+                        }
+                    ]
                 }
             })
         } else if template_name.contains("role_definition") {

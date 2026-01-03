@@ -2,8 +2,9 @@ use anyhow::{anyhow, Context, Result};
 use aws_sdk_iam::Client as IamClient;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
+use crate::domain::iam_policy::IamPolicyDocument;
 use crate::infra::aws::client_factory::AwsClientFactory;
 use crate::models::ScanConfig;
 
@@ -429,7 +430,63 @@ impl AwsIamScanner {
                         if let Some(document) =
                             version_result.policy_version().and_then(|v| v.document())
                         {
-                            policy_json["policy_document"] = json!(document);
+                            // ポリシードキュメントをパースして構造化
+                            // AWS IAM APIから返されるdocumentはURLエンコードされた文字列
+                            let decoded_document = urlencoding::decode(document)
+                                .unwrap_or_else(|_| std::borrow::Cow::Borrowed(document));
+
+                            match IamPolicyDocument::from_json_str(&decoded_document) {
+                                Ok(parsed_doc) => {
+                                    // パース成功: 構造化されたステートメントを保存
+                                    let statements_json: Vec<Value> = parsed_doc.statements.iter().map(|stmt| {
+                                        let mut stmt_json = json!({
+                                            "effect": stmt.effect,
+                                        });
+
+                                        if let Some(sid) = &stmt.sid {
+                                            stmt_json["sid"] = json!(sid);
+                                        }
+
+                                        if let Some(action) = &stmt.action {
+                                            stmt_json["actions"] = json!(action.as_vec());
+                                        }
+
+                                        if let Some(resource) = &stmt.resource {
+                                            stmt_json["resources"] = json!(resource.as_vec());
+                                        }
+
+                                        if let Some(principal) = &stmt.principal {
+                                            stmt_json["principal"] = principal.clone();
+                                        }
+
+                                        if let Some(condition) = &stmt.condition {
+                                            stmt_json["condition"] = condition.clone();
+                                        }
+
+                                        if let Some(not_action) = &stmt.not_action {
+                                            stmt_json["not_actions"] = json!(not_action.as_vec());
+                                        }
+
+                                        if let Some(not_resource) = &stmt.not_resource {
+                                            stmt_json["not_resources"] = json!(not_resource.as_vec());
+                                        }
+
+                                        stmt_json
+                                    }).collect();
+
+                                    policy_json["statements"] = json!(statements_json);
+
+                                    // バージョンも保存
+                                    if let Some(version) = parsed_doc.version {
+                                        policy_json["policy_version"] = json!(version);
+                                    }
+                                }
+                                Err(e) => {
+                                    // パース失敗: 元のドキュメントをそのまま保存（後方互換性）
+                                    warn!("Failed to parse policy document for {}: {}. Falling back to raw document.", policy_name, e);
+                                    policy_json["policy_document"] = json!(decoded_document);
+                                }
+                            }
                         }
                     }
                 }

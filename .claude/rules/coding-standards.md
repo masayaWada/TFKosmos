@@ -16,6 +16,7 @@ description: Coding standards and naming conventions for Rust and TypeScript, in
 6. [エラーハンドリング](#エラーハンドリング)
 7. [非同期処理](#非同期処理)
 8. [セキュリティ](#セキュリティ)
+9. [Terraformコード記述規約](#terraformコード記述規約)
 
 ---
 
@@ -662,6 +663,142 @@ function sanitizeInput(input: string): string {
 
 ---
 
+## Terraformコード記述規約
+
+適用対象: `backend/templates_default/terraform/**/*.tf.j2`, 生成されたTerraformコード
+
+### IAMポリシーの記述方法
+
+IAMポリシーは、`data "aws_iam_policy_document"` ブロックを使用してHCL形式で記述すること。JSONで直接記述しないこと。
+
+#### ✅ 推奨される記述方法
+
+```hcl
+data "aws_iam_policy_document" "athena_policy" {
+  statement {
+    sid    = "AthenaQueryExecution"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket",
+      "s3:GetObject",
+      "s3:PutObject"
+    ]
+    resources = [
+      "arn:aws:s3:::my-bucket",
+      "arn:aws:s3:::my-bucket/*"
+    ]
+  }
+
+  statement {
+    sid    = "GlueAccess"
+    effect = "Allow"
+    actions = [
+      "glue:GetTable",
+      "glue:GetDatabase"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "athena_policy" {
+  name        = "AthenaQueryPolicy"
+  description = "Policy for Athena query execution"
+  policy      = data.aws_iam_policy_document.athena_policy.json
+}
+```
+
+#### ❌ 非推奨の記述方法
+
+```hcl
+# JSONを直接記述する方法（使用しないこと）
+resource "aws_iam_policy" "athena_policy" {
+  name        = "AthenaQueryPolicy"
+  description = "Policy for Athena query execution"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AthenaQueryExecution"
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetObject",
+          "s3:PutObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::my-bucket",
+          "arn:aws:s3:::my-bucket/*"
+        ]
+      }
+    ]
+  })
+}
+```
+
+### 推奨する理由
+
+1. **可読性**: HCL形式で記述することで、コードが読みやすく、メンテナンスしやすくなる
+2. **型安全性**: Terraformの型チェックが有効に機能し、設定ミスを早期に発見できる
+3. **再利用性**: `data "aws_iam_policy_document"` は他のポリシードキュメントと組み合わせて使用できる
+4. **検証**: `terraform validate` や `terraform plan` での検証が容易になる
+5. **IDE支援**: エディタの自動補完やシンタックスハイライトが適切に機能する
+
+### ベストプラクティス
+
+1. **Statement IDの明記**
+   - 各 `statement` ブロックには必ず `sid` を指定する
+   - `sid` は Statement の目的を明確に表す名前にする
+
+2. **Effectの明示**
+   - `effect` は明示的に `"Allow"` または `"Deny"` を指定する
+   - デフォルト値に依存しない
+
+3. **Actionのグループ化**
+   - 関連するアクションは同じ `statement` ブロックにまとめる
+   - 異なる目的のアクションは別の `statement` ブロックに分ける
+
+4. **Resourceの具体化**
+   - 可能な限り具体的なARNを指定する
+   - `"*"` の使用は最小限に抑える
+
+### Jinja2テンプレートでの使用例
+
+```jinja2
+{# backend/templates_default/terraform/aws/iam_policy.tf.j2 #}
+
+data "aws_iam_policy_document" "{{ policy.name }}_policy" {
+  {% for statement in policy.statements %}
+  statement {
+    sid    = "{{ statement.sid }}"
+    effect = "{{ statement.effect }}"
+    actions = [
+      {% for action in statement.actions %}
+      "{{ action }}",
+      {% endfor %}
+    ]
+    resources = [
+      {% for resource in statement.resources %}
+      "{{ resource }}",
+      {% endfor %}
+    ]
+  }
+  {% endfor %}
+}
+
+resource "aws_iam_policy" "{{ policy.name }}" {
+  name        = "{{ policy.display_name }}"
+  description = "{{ policy.description }}"
+  policy      = data.aws_iam_policy_document.{{ policy.name }}_policy.json
+}
+```
+
+### 関連リンク
+
+- [Terraform AWS Provider - aws_iam_policy_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document)
+- [AWS IAM Policy Best Practices](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html)
+
+---
+
 ## 関連ドキュメント
 
 - [ビルドとLint](.build-and-lint.md) - コンパイルチェックとLint実行方法
@@ -675,5 +812,6 @@ function sanitizeInput(input: string): string {
 
 | 日付 | 変更内容 | 変更者 |
 |------|----------|--------|
+| 2026-01-04 | Terraformコード記述規約を追加 | @wadamasaya |
 | 2026-01-01 | Serena MCP利用ガイドラインを追加 | @wadamasaya |
 | 2025-12-XX | 初版作成 | @wadamasaya |
