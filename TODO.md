@@ -82,23 +82,27 @@
   - [x] カスタムフック（useApp, useScan, useConnection, useNotifications）のテスト
 
 ##### APIクライアントのテスト
-- [ ] `api/connection.ts` のテスト
-  - [ ] `testAwsConnection()` のモックテスト
-  - [ ] `testAzureConnection()` のモックテスト
-  - [ ] `listAzureSubscriptions()` のモックテスト
-  - [ ] `listAzureResourceGroups()` のモックテスト
-  - [ ] エラーハンドリングのテスト
+- [x] `api/connection.ts` のテスト（実装完了・11テスト）
+  - [x] `testAws()` のモックテスト
+  - [x] `testAzure()` のモックテスト
+  - [x] `awsLogin()` のモックテスト
+  - [x] エラーハンドリングのテスト
 
-- [ ] `api/scan.ts` のテスト
-  - [ ] `startScan()` のモックテスト
-  - [ ] `getScanStatus()` のモックテスト
-  - [ ] エラーハンドリングのテスト
+- [x] `api/scan.ts` のテスト（実装完了・18テスト）
+  - [x] `scanAws()` のモックテスト
+  - [x] `scanAzure()` のモックテスト
+  - [x] `getStatus()` のモックテスト
+  - [x] `azureApi.listSubscriptions()` のモックテスト
+  - [x] `azureApi.listResourceGroups()` のモックテスト
+  - [x] エラーハンドリングのテスト
 
-- [ ] `api/resources.ts` のテスト
-  - [ ] `getResources()` のモックテスト
-  - [ ] `getScanData()` のモックテスト
-  - [ ] `queryResources()` のモックテスト
-  - [ ] `getDependencyGraph()` のモックテスト
+- [x] `api/resources.ts` のテスト（実装完了・18テスト）
+  - [x] `getResources()` のモックテスト
+  - [x] `getSelectedResources()` のモックテスト
+  - [x] `selectResources()` のモックテスト
+  - [x] `query()` のモックテスト
+  - [x] `getDependencies()` のモックテスト
+  - [x] エラーハンドリングのテスト
 
 ##### 重要なページコンポーネントのテスト
 - [ ] `pages/ResourcesPage.tsx` のテスト（最複雑・最重要）
