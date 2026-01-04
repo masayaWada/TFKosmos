@@ -263,6 +263,19 @@ impl<C: IamClientOps> AwsIamScanner<C> {
                 "assume_role_statements": assume_role_statements,
             });
 
+            // 生のassume_role_policy_documentも保存（Terraform生成やパース失敗時のために必要）
+            // テンプレートでjsonencode()を使用するため、URLデコードされたJSON文字列として保存する
+            if let Some(ref policy_doc) = role.assume_role_policy_document {
+                let decoded_doc = match urlencoding::decode(policy_doc) {
+                    Ok(s) => s.to_string(),
+                    Err(_) => {
+                        // URLエンコードされていない場合はそのまま使用
+                        policy_doc.clone()
+                    }
+                };
+                role_json["assume_role_policy_document"] = json!(decoded_doc);
+            }
+
             if !role.tags.is_empty() {
                 role_json["tags"] = json!(role.tags);
             }
@@ -542,6 +555,10 @@ impl<C: IamClientOps> AwsIamScanner<C> {
                             ("Unknown".to_string(), vec![])
                         }
                     }
+                    Some(Value::String(s)) if s == "*" => {
+                        // Principalが"*"の形式（{"AWS": "*"}と同じ意味）
+                        ("AWS".to_string(), vec!["*".to_string()])
+                    }
                     _ => ("Unknown".to_string(), vec![]),
                 };
 
@@ -751,6 +768,35 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
+    #[test]
+    fn test_parse_assume_role_policy_asterisk_principal() {
+        let policy = r#"{
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "sts:AssumeRole",
+                    "Condition": {
+                        "StringEquals": {
+                            "sts:ExternalId": "unique-external-id"
+                        }
+                    }
+                }
+            ]
+        }"#;
+
+        let result = AwsIamScanner::<MockIamClient>::parse_assume_role_policy(policy);
+        assert_eq!(result.len(), 1);
+
+        let stmt = &result[0];
+        assert_eq!(stmt["effect"], "Allow");
+        assert_eq!(stmt["principal_type"], "AWS");
+        assert_eq!(stmt["principal_identifiers"], json!(["*"]));
+        assert_eq!(stmt["actions"], json!(["sts:AssumeRole"]));
+        assert_eq!(stmt["conditions"].as_array().unwrap().len(), 1);
+    }
+
     // ========================================
     // apply_name_prefix_filter のテスト
     // ========================================
@@ -921,9 +967,56 @@ mod tests {
         assert_eq!(roles.len(), 1);
         assert_eq!(roles[0]["role_name"], "lambda-execution-role");
 
+        // assume_role_policy_documentフィールドが含まれていることを確認
+        assert!(roles[0]["assume_role_policy_document"].is_string());
+        assert!(roles[0]["assume_role_policy_document"].as_str().unwrap().contains("lambda.amazonaws.com"));
+
         let assume_role_statements = roles[0]["assume_role_statements"].as_array().unwrap();
         assert_eq!(assume_role_statements.len(), 1);
         assert_eq!(assume_role_statements[0]["principal_type"], "Service");
+    }
+
+    #[tokio::test]
+    async fn test_scan_roles_with_url_encoded_policy_document() {
+        let mut mock_client = MockIamClient::new();
+
+        // URLエンコードされたポリシードキュメントをテスト
+        let encoded_policy = "%7B%22Version%22%3A%222012-10-17%22%2C%22Statement%22%3A%5B%7B%22Effect%22%3A%22Allow%22%2C%22Principal%22%3A%7B%22Service%22%3A%22lambda.amazonaws.com%22%7D%2C%22Action%22%3A%22sts%3AAssumeRole%22%7D%5D%7D";
+        let decoded_policy = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}"#;
+
+        mock_client.expect_list_roles().returning(move || {
+            Ok(vec![
+                IamRoleInfo {
+                    role_name: "lambda-execution-role".to_string(),
+                    role_id: "AROA1234567890".to_string(),
+                    arn: "arn:aws:iam::123456789012:role/lambda-execution-role".to_string(),
+                    create_date: 1609459200,
+                    path: "/service-role/".to_string(),
+                    assume_role_policy_document: Some(encoded_policy.to_string()),
+                    tags: HashMap::new(),
+                },
+            ])
+        });
+
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(HashMap::new(), HashMap::new()),
+            mock_client,
+        );
+
+        let roles = scanner.scan_roles().await.unwrap();
+
+        assert_eq!(roles.len(), 1);
+        
+        // URLデコードされたポリシードキュメントが保存されていることを確認
+        let stored_policy = roles[0]["assume_role_policy_document"].as_str().unwrap();
+        assert_eq!(stored_policy, decoded_policy);
+        
+        // URLエンコードされた文字列が含まれていないことを確認
+        assert!(!stored_policy.contains("%7B"));
+        assert!(!stored_policy.contains("%22"));
+        
+        // デコードされたJSONが有効であることを確認
+        assert!(serde_json::from_str::<serde_json::Value>(stored_policy).is_ok());
     }
 
     // ========================================
