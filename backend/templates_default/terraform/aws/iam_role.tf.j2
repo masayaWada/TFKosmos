@@ -1,9 +1,48 @@
-resource "aws_iam_role" "{{ resource_name }}" {
-  name = "{{ role.role_name }}"
-  path = "{{ role.path }}"
+{% if role.assume_role_statements %}
+# Assume Role Policy（信頼ポリシー）
+data "aws_iam_policy_document" "{{ resource_name }}_assume_role" {
+{% for statement in role.assume_role_statements %}
+  statement {
+    effect = "{{ statement.effect }}"
 
-  assume_role_policy = jsonencode({{ role.assume_role_policy_document }})
+    principals {
+      type        = "{{ statement.principal_type }}"
+      identifiers = [
+{% for identifier in statement.principal_identifiers %}
+        "{{ identifier }}",
+{% endfor %}
+      ]
+    }
+
+    actions = [
+{% for action in statement.actions %}
+      "{{ action }}",
+{% endfor %}
+    ]
+{% if statement.conditions %}
+
+{% for condition in statement.conditions %}
+    condition {
+      test     = "{{ condition.test }}"
+      variable = "{{ condition.variable }}"
+      values   = [
+{% for value in condition.values %}
+        "{{ value }}",
+{% endfor %}
+      ]
+    }
+{% endfor %}
+{% endif %}
+  }
+{% endfor %}
+}
+
+resource "aws_iam_role" "{{ resource_name }}" {
+  name               = "{{ role.role_name }}"
+  path               = "{{ role.path }}"
+  assume_role_policy = data.aws_iam_policy_document.{{ resource_name }}_assume_role.json
 {% if role.tags %}
+
   tags = {
 {% for key in role.tags %}
     "{{ key }}" = "{{ role.tags[key] }}"
@@ -11,4 +50,22 @@ resource "aws_iam_role" "{{ resource_name }}" {
   }
 {% endif %}
 }
+
+{% else %}
+# フォールバック: 構造化されていないAssume Role Policy（非推奨）
+resource "aws_iam_role" "{{ resource_name }}" {
+  name = "{{ role.role_name }}"
+  path = "{{ role.path }}"
+
+  assume_role_policy = jsonencode({{ role.assume_role_policy_document }})
+{% if role.tags %}
+
+  tags = {
+{% for key in role.tags %}
+    "{{ key }}" = "{{ role.tags[key] }}"
+{% endfor %}
+  }
+{% endif %}
+}
+{% endif %}
 

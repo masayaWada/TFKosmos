@@ -792,9 +792,161 @@ resource "aws_iam_policy" "{{ policy.name }}" {
 }
 ```
 
+### IAMロールのAssume Role Policyの記述方法
+
+IAMロールの信頼ポリシー（Assume Role Policy）も、`data "aws_iam_policy_document"` ブロックを使用してHCL形式で記述すること。`jsonencode`で直接記述しないこと。
+
+#### ✅ 推奨される記述方法
+
+```hcl
+# Assume Role Policy用のポリシードキュメント
+data "aws_iam_policy_document" "lambda_assume_role" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+# IAMロールの定義
+resource "aws_iam_role" "lambda_execution" {
+  name               = "lambda-execution-role"
+  description        = "Execution role for Lambda functions"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+}
+```
+
+**複数のプリンシパルを許可する例:**
+
+```hcl
+data "aws_iam_policy_document" "ec2_and_lambda_assume_role" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = [
+        "ec2.amazonaws.com",
+        "lambda.amazonaws.com"
+      ]
+    }
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+resource "aws_iam_role" "multi_service_role" {
+  name               = "multi-service-role"
+  assume_role_policy = data.aws_iam_policy_document.ec2_and_lambda_assume_role.json
+}
+```
+
+**条件付きAssume Roleの例:**
+
+```hcl
+data "aws_iam_policy_document" "assume_role_with_condition" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+    actions = ["sts:AssumeRole"]
+    condition {
+      test     = "StringEquals"
+      variable = "sts:ExternalId"
+      values   = ["unique-external-id"]
+    }
+  }
+}
+
+resource "aws_iam_role" "secure_role" {
+  name               = "secure-role"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_with_condition.json
+}
+```
+
+#### ❌ 非推奨の記述方法
+
+```hcl
+# JSONを直接記述する方法（使用しないこと）
+resource "aws_iam_role" "lambda_execution" {
+  name        = "lambda-execution-role"
+  description = "Execution role for Lambda functions"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+```
+
+**Jinja2テンプレートでのAssume Role Policy使用例:**
+
+```jinja2
+{# backend/templates_default/terraform/aws/iam_role.tf.j2 #}
+
+data "aws_iam_policy_document" "{{ role.name }}_assume_role" {
+  {% for statement in role.assume_role_statements %}
+  statement {
+    effect = "{{ statement.effect }}"
+    principals {
+      type        = "{{ statement.principal_type }}"
+      identifiers = [
+        {% for identifier in statement.principal_identifiers %}
+        "{{ identifier }}",
+        {% endfor %}
+      ]
+    }
+    actions = [
+      {% for action in statement.actions %}
+      "{{ action }}",
+      {% endfor %}
+    ]
+    {% if statement.conditions %}
+    {% for condition in statement.conditions %}
+    condition {
+      test     = "{{ condition.test }}"
+      variable = "{{ condition.variable }}"
+      values   = [
+        {% for value in condition.values %}
+        "{{ value }}",
+        {% endfor %}
+      ]
+    }
+    {% endfor %}
+    {% endif %}
+  }
+  {% endfor %}
+}
+
+resource "aws_iam_role" "{{ role.name }}" {
+  name               = "{{ role.display_name }}"
+  description        = "{{ role.description }}"
+  assume_role_policy = data.aws_iam_policy_document.{{ role.name }}_assume_role.json
+
+  {% if role.managed_policy_arns %}
+  managed_policy_arns = [
+    {% for arn in role.managed_policy_arns %}
+    "{{ arn }}",
+    {% endfor %}
+  ]
+  {% endif %}
+}
+```
+
 ### 関連リンク
 
 - [Terraform AWS Provider - aws_iam_policy_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document)
+- [Terraform AWS Provider - aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role)
 - [AWS IAM Policy Best Practices](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html)
 
 ---
@@ -812,6 +964,7 @@ resource "aws_iam_policy" "{{ policy.name }}" {
 
 | 日付 | 変更内容 | 変更者 |
 |------|----------|--------|
+| 2026-01-04 | IAMロールのAssume Role Policyに関する規約を追加 | @wadamasaya |
 | 2026-01-04 | Terraformコード記述規約を追加 | @wadamasaya |
 | 2026-01-01 | Serena MCP利用ガイドラインを追加 | @wadamasaya |
 | 2025-12-XX | 初版作成 | @wadamasaya |

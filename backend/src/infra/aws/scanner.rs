@@ -335,14 +335,24 @@ impl AwsIamScanner {
                 }
 
                 let create_date = role.create_date().secs();
+
+                // Assume Role Policy Documentを取得してパース
+                let assume_role_policy_doc = role.assume_role_policy_document().unwrap_or("").to_string();
+                let assume_role_statements = Self::parse_assume_role_policy(&assume_role_policy_doc);
+
                 let mut role_json = json!({
                     "role_name": role_name,
                     "role_id": role.role_id().to_string(),
                     "arn": role.arn().to_string(),
                     "create_date": create_date,
                     "path": role.path().to_string(),
-                    "assume_role_policy_document": role.assume_role_policy_document().unwrap_or("").to_string(),
+                    "assume_role_policy_document": assume_role_policy_doc,
                 });
+
+                // パースに成功した場合は構造化データも追加
+                if !assume_role_statements.is_empty() {
+                    role_json["assume_role_statements"] = json!(assume_role_statements);
+                }
 
                 // タグを取得
                 if let Ok(tags_result) = self
@@ -778,5 +788,140 @@ impl AwsIamScanner {
         }
 
         Ok(cleanup_items)
+    }
+
+    /// Assume Role Policy DocumentをパースしてTerraform用の構造化データに変換
+    fn parse_assume_role_policy(policy_doc: &str) -> Vec<Value> {
+        if policy_doc.is_empty() {
+            return Vec::new();
+        }
+
+        // URLデコード
+        let decoded = match urlencoding::decode(policy_doc) {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                // URLエンコードされていない場合はそのまま使用
+                policy_doc.to_string()
+            }
+        };
+
+        // JSONパース
+        let policy_value: Value = match serde_json::from_str(&decoded) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Failed to parse assume_role_policy_document: {}", e);
+                return Vec::new();
+            }
+        };
+
+        // Statementを抽出
+        let statements = match policy_value.get("Statement") {
+            Some(Value::Array(arr)) => arr,
+            _ => {
+                warn!("No Statement array found in assume_role_policy_document");
+                return Vec::new();
+            }
+        };
+
+        // 各Statementを変換
+        statements
+            .iter()
+            .filter_map(|stmt| {
+                let effect = stmt.get("Effect")?.as_str()?.to_string();
+
+                // Principalの処理
+                let (principal_type, principal_identifiers) = match stmt.get("Principal") {
+                    Some(Value::Object(principal_obj)) => {
+                        // Principalが{"Service": "..."}の形式
+                        if let Some(service) = principal_obj.get("Service") {
+                            let identifiers = match service {
+                                Value::String(s) => vec![s.clone()],
+                                Value::Array(arr) => arr
+                                    .iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect(),
+                                _ => vec![],
+                            };
+                            ("Service".to_string(), identifiers)
+                        } else if let Some(aws) = principal_obj.get("AWS") {
+                            // Principalが{"AWS": "..."}の形式
+                            let identifiers = match aws {
+                                Value::String(s) => vec![s.clone()],
+                                Value::Array(arr) => arr
+                                    .iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect(),
+                                _ => vec![],
+                            };
+                            ("AWS".to_string(), identifiers)
+                        } else if let Some(federated) = principal_obj.get("Federated") {
+                            // Principalが{"Federated": "..."}の形式
+                            let identifiers = match federated {
+                                Value::String(s) => vec![s.clone()],
+                                Value::Array(arr) => arr
+                                    .iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect(),
+                                _ => vec![],
+                            };
+                            ("Federated".to_string(), identifiers)
+                        } else {
+                            // その他のPrincipal
+                            ("AWS".to_string(), vec!["*".to_string()])
+                        }
+                    }
+                    Some(Value::String(s)) if s == "*" => {
+                        // Principalが"*"の形式
+                        ("AWS".to_string(), vec!["*".to_string()])
+                    }
+                    _ => return None,
+                };
+
+                // Actionの処理
+                let actions = match stmt.get("Action") {
+                    Some(Value::String(s)) => vec![s.clone()],
+                    Some(Value::Array(arr)) => arr
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect(),
+                    _ => vec!["sts:AssumeRole".to_string()], // デフォルト
+                };
+
+                // Conditionの処理
+                let conditions = if let Some(Value::Object(condition_obj)) = stmt.get("Condition") {
+                    let mut conds = Vec::new();
+                    for (test, value_obj) in condition_obj.iter() {
+                        if let Value::Object(var_obj) = value_obj {
+                            for (variable, values) in var_obj.iter() {
+                                let value_list = match values {
+                                    Value::String(s) => vec![s.clone()],
+                                    Value::Array(arr) => arr
+                                        .iter()
+                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                        .collect(),
+                                    _ => vec![],
+                                };
+                                conds.push(json!({
+                                    "test": test,
+                                    "variable": variable,
+                                    "values": value_list,
+                                }));
+                            }
+                        }
+                    }
+                    conds
+                } else {
+                    vec![]
+                };
+
+                Some(json!({
+                    "effect": effect,
+                    "principal_type": principal_type,
+                    "principal_identifiers": principal_identifiers,
+                    "actions": actions,
+                    "conditions": conditions,
+                }))
+            })
+            .collect()
     }
 }
