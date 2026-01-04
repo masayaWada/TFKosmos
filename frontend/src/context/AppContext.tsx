@@ -56,7 +56,7 @@ export interface AppState {
 // 初期状態
 // ========================================
 
-const initialState: AppState = {
+export const initialState: AppState = {
   scan: {
     scanId: null,
     provider: null,
@@ -107,7 +107,7 @@ type Action =
 // リデューサー
 // ========================================
 
-function appReducer(state: AppState, action: Action): AppState {
+export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     // スキャン関連
     case "START_SCAN":

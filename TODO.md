@@ -64,15 +64,22 @@
 #### フロントエンド
 
 ##### AppContext（状態管理）のテスト
-- [ ] `context/AppContext.tsx` のReducerテスト（最重要）
-  - [ ] `SET_PROVIDER` アクションのテスト
-  - [ ] `SET_SCAN_CONFIG` アクションのテスト
-  - [ ] `SET_SCAN_ID` アクションのテスト
-  - [ ] `SET_SCAN_STATUS` アクションのテスト
-  - [ ] `SET_SCAN_RESULT` アクションのテスト
-  - [ ] `ADD_NOTIFICATION` アクションのテスト
-  - [ ] `REMOVE_NOTIFICATION` アクションのテスト
-  - [ ] カスタムフック（useApp, useScan, useConnection, useNotifications）のテスト
+- [x] `context/AppContext.tsx` のReducerテスト（実装完了・42テスト）
+  - [x] `START_SCAN` アクションのテスト（AWS、Azure）
+  - [x] `UPDATE_SCAN_PROGRESS` アクションのテスト
+  - [x] `COMPLETE_SCAN` アクションのテスト
+  - [x] `FAIL_SCAN` アクションのテスト
+  - [x] `RESET_SCAN` アクションのテスト
+  - [x] `SET_AWS_CONNECTION` アクションのテスト
+  - [x] `VALIDATE_AWS_CONNECTION` アクションのテスト
+  - [x] `INVALIDATE_AWS_CONNECTION` アクションのテスト
+  - [x] `SET_AZURE_CONNECTION` アクションのテスト
+  - [x] `VALIDATE_AZURE_CONNECTION` アクションのテスト
+  - [x] `INVALIDATE_AZURE_CONNECTION` アクションのテスト
+  - [x] `ADD_NOTIFICATION` アクションのテスト
+  - [x] `REMOVE_NOTIFICATION` アクションのテスト
+  - [x] `CLEAR_NOTIFICATIONS` アクションのテスト
+  - [x] カスタムフック（useApp, useScan, useConnection, useNotifications）のテスト
 
 ##### APIクライアントのテスト
 - [ ] `api/connection.ts` のテスト
