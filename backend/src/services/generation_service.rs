@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::infra::generators::terraform::TerraformGenerator;
+use crate::infra::terraform::cli::TerraformCli;
 use crate::models::{GenerationConfig, GenerationResponse};
 use crate::services::scan_service::ScanService;
 
@@ -103,6 +104,26 @@ impl GenerationService {
             println!("[GENERATION_SERVICE] Import script generated: {}", script_path);
         } else {
             println!("[GENERATION_SERVICE] No import script generated (no resources to import)");
+        }
+
+        // Format generated Terraform files
+        println!("[GENERATION_SERVICE] Formatting Terraform files with terraform fmt");
+        match TerraformCli::fmt(&output_path) {
+            Ok(formatted_files) => {
+                if !formatted_files.is_empty() {
+                    println!("[GENERATION_SERVICE] Formatted {} files:", formatted_files.len());
+                    for file in &formatted_files {
+                        println!("[GENERATION_SERVICE]   - {}", file);
+                    }
+                } else {
+                    println!("[GENERATION_SERVICE] All files were already formatted");
+                }
+            }
+            Err(e) => {
+                // フォーマットエラーは警告のみ（Terraformがインストールされていない環境でも動作するように）
+                eprintln!("[GENERATION_SERVICE] Warning: Failed to format Terraform files: {}", e);
+                eprintln!("[GENERATION_SERVICE] Continuing without formatting. Please run 'terraform fmt' manually if needed.");
+            }
         }
 
         // Generate preview: read first 1000 characters of each generated file

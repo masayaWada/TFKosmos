@@ -98,6 +98,8 @@ impl TemplateManager {
 
         // Use minijinja to render template
         let mut env = minijinja::Environment::new();
+        env.set_trim_blocks(true);
+        env.set_lstrip_blocks(true);
         env.add_template(template_name, &template_content)
             .with_context(|| format!("Failed to add template '{}' to environment", template_name))?;
 

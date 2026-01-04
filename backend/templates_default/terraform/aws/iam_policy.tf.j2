@@ -4,46 +4,40 @@ data "aws_iam_policy_document" "{{ resource_name }}" {
 {% if policy.policy_version %}
   version = "{{ policy.policy_version }}"
 {% endif %}
-
 {% for statement in policy.statements %}
   statement {
 {% if statement.sid %}
     sid    = "{{ statement.sid }}"
 {% endif %}
     effect = "{{ statement.effect }}"
-
 {% if statement.actions %}
     actions = [
 {% for action in statement.actions %}
-      "{{ action }}",
+      "{{ action | replace('${', '$${') }}",
 {% endfor %}
     ]
 {% endif %}
-
 {% if statement.resources %}
     resources = [
 {% for resource in statement.resources %}
-      "{{ resource }}",
+      "{{ resource | replace('${', '$${') }}",
 {% endfor %}
     ]
 {% endif %}
-
 {% if statement.not_actions %}
     not_actions = [
 {% for action in statement.not_actions %}
-      "{{ action }}",
+      "{{ action | replace('${', '$${') }}",
 {% endfor %}
     ]
 {% endif %}
-
 {% if statement.not_resources %}
     not_resources = [
 {% for resource in statement.not_resources %}
-      "{{ resource }}",
+      "{{ resource | replace('${', '$${') }}",
 {% endfor %}
     ]
 {% endif %}
-
 {% if statement.principal %}
     principals {
       # Note: Principalの構造は複雑なため、必要に応じてカスタマイズしてください
@@ -51,7 +45,6 @@ data "aws_iam_policy_document" "{{ resource_name }}" {
       identifiers = ["*"]
     }
 {% endif %}
-
 {% if statement.condition %}
     # Note: Conditionの構造は複雑なため、必要に応じてカスタマイズしてください
     # condition {
@@ -61,7 +54,6 @@ data "aws_iam_policy_document" "{{ resource_name }}" {
     # }
 {% endif %}
   }
-
 {% endfor %}
 }
 

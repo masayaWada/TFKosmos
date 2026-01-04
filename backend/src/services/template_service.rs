@@ -105,6 +105,8 @@ impl TemplateService {
 
         // Create a temporary template file and render it
         let mut env = minijinja::Environment::new();
+        env.set_trim_blocks(true);
+        env.set_lstrip_blocks(true);
         env.add_template(template_name, template_content)?;
         let template = env.get_template(template_name)?;
         Ok(template.render(&sample_context)?)
@@ -119,6 +121,8 @@ impl TemplateService {
 
         // 1. Jinja2構文チェック（minijinjaでパース）
         let mut env = minijinja::Environment::new();
+        env.set_trim_blocks(true);
+        env.set_lstrip_blocks(true);
         if let Err(e) = env.add_template(template_name, template_content) {
             errors.push(ValidationError {
                 error_type: "jinja2".to_string(),
