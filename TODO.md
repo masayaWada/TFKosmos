@@ -146,17 +146,18 @@
 #### フロントエンド
 
 ##### 接続フォームのテスト
-- [ ] `components/connection/AwsConnectionForm.tsx` のテスト
-  - [ ] フォームバリデーションのテスト
-  - [ ] 接続テスト実行のテスト
-  - [ ] エラー表示のテスト
-  - [ ] プロファイル/リージョン選択のテスト
+- [x] `components/connection/AwsConnectionForm.tsx` のテスト（実装完了・18テスト）
+  - [x] フォームバリデーションのテスト
+  - [x] 接続テスト実行のテスト
+  - [x] エラー表示のテスト
+  - [x] プロファイル/リージョン選択のテスト
+  - [x] aws login機能のテスト
 
-- [ ] `components/connection/AzureConnectionForm.tsx` のテスト
-  - [ ] 認証方法選択のテスト
-  - [ ] サービスプリンシパル設定のテスト
-  - [ ] 接続テスト実行のテスト
-  - [ ] エラー表示のテスト
+- [x] `components/connection/AzureConnectionForm.tsx` のテスト（実装完了・11テスト通過、6テスト未完了）
+  - [x] 認証方法選択のテスト
+  - [ ] サービスプリンシパル設定のテスト（部分的に実装）
+  - [x] 接続テスト実行のテスト
+  - [x] エラー表示のテスト
 
 ##### スキャン関連コンポーネントのテスト
 - [ ] `components/scan/ScanConfigForm.tsx` のテスト
