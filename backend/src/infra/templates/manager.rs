@@ -113,3 +113,214 @@ impl TemplateManager {
         Ok(rendered)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_load_template_from_user_path() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let user_template_dir = temp_dir.path().join("templates_user/terraform");
+        fs::create_dir_all(&user_template_dir).unwrap();
+        
+        let template_name = "test_template.tf.j2";
+        let template_content = "resource \"aws_iam_user\" \"{{ resource_name }}\" {}";
+        let template_path = user_template_dir.join(template_name);
+        fs::write(&template_path, template_content).unwrap();
+
+        // カレントディレクトリを一時ディレクトリに変更
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Act
+        let result = TemplateManager::load_template(template_name).await;
+
+        // Assert
+        assert!(result.is_ok(), "Template should be loaded successfully");
+        assert_eq!(result.unwrap(), template_content);
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_load_template_from_default_path() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let default_template_dir = temp_dir.path().join("templates_default/terraform");
+        fs::create_dir_all(&default_template_dir).unwrap();
+        
+        let template_name = "test_template.tf.j2";
+        let template_content = "resource \"aws_iam_user\" \"{{ resource_name }}\" {}";
+        let template_path = default_template_dir.join(template_name);
+        fs::write(&template_path, template_content).unwrap();
+
+        // カレントディレクトリを一時ディレクトリに変更
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Act
+        let result = TemplateManager::load_template(template_name).await;
+
+        // Assert
+        assert!(result.is_ok(), "Template should be loaded successfully");
+        assert_eq!(result.unwrap(), template_content);
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_load_template_user_overrides_default() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let user_template_dir = temp_dir.path().join("templates_user/terraform");
+        let default_template_dir = temp_dir.path().join("templates_default/terraform");
+        fs::create_dir_all(&user_template_dir).unwrap();
+        fs::create_dir_all(&default_template_dir).unwrap();
+        
+        let template_name = "test_template.tf.j2";
+        let user_content = "user template content";
+        let default_content = "default template content";
+        
+        fs::write(user_template_dir.join(template_name), user_content).unwrap();
+        fs::write(default_template_dir.join(template_name), default_content).unwrap();
+
+        // カレントディレクトリを一時ディレクトリに変更
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Act
+        let result = TemplateManager::load_template(template_name).await;
+
+        // Assert: ユーザーテンプレートが優先される
+        assert!(result.is_ok(), "Template should be loaded successfully");
+        assert_eq!(result.unwrap(), user_content);
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_load_template_not_found() {
+        // Arrange: テンプレートが存在しない一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Act
+        let result = TemplateManager::load_template("nonexistent_template.tf.j2").await;
+
+        // Assert
+        assert!(result.is_err(), "Template should not be found");
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Template not found"), "Error message should indicate template not found");
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_load_template_with_subdirectory() {
+        // Arrange: サブディレクトリを含むテンプレートパス
+        let temp_dir = TempDir::new().unwrap();
+        let user_template_dir = temp_dir.path().join("templates_user/terraform/aws");
+        fs::create_dir_all(&user_template_dir).unwrap();
+        
+        let template_name = "aws/iam_user.tf.j2";
+        let template_content = "resource \"aws_iam_user\" \"{{ resource_name }}\" {}";
+        let template_path = user_template_dir.join("iam_user.tf.j2");
+        fs::write(&template_path, template_content).unwrap();
+
+        // カレントディレクトリを一時ディレクトリに変更
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Act
+        let result = TemplateManager::load_template(template_name).await;
+
+        // Assert
+        assert!(result.is_ok(), "Template should be loaded successfully");
+        assert_eq!(result.unwrap(), template_content);
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_render_template() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let user_template_dir = temp_dir.path().join("templates_user/terraform");
+        fs::create_dir_all(&user_template_dir).unwrap();
+        
+        let template_name = "test_template.tf.j2";
+        let template_content = r#"resource "aws_iam_user" "{{ resource_name }}" {
+  name = "{{ user.user_name }}"
+}"#;
+        let template_path = user_template_dir.join(template_name);
+        fs::write(&template_path, template_content).unwrap();
+
+        let context = serde_json::json!({
+            "resource_name": "test_user",
+            "user": {
+                "user_name": "test-user"
+            }
+        });
+
+        // カレントディレクトリを一時ディレクトリに変更
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Act
+        let result = TemplateManager::render_template(template_name, &context).await;
+
+        // Assert
+        assert!(result.is_ok(), "Template should be rendered successfully");
+        let rendered = result.unwrap();
+        assert!(rendered.contains("test_user"), "Rendered template should contain resource_name");
+        assert!(rendered.contains("test-user"), "Rendered template should contain user_name");
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_render_template_with_invalid_syntax() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let user_template_dir = temp_dir.path().join("templates_user/terraform");
+        fs::create_dir_all(&user_template_dir).unwrap();
+        
+        let template_name = "test_template.tf.j2";
+        let template_content = r#"resource "aws_iam_user" "{{ resource_name" {
+  name = "{{ user.user_name }}"
+}"#;  // 閉じ括弧がない
+        let template_path = user_template_dir.join(template_name);
+        fs::write(&template_path, template_content).unwrap();
+
+        let context = serde_json::json!({
+            "resource_name": "test_user",
+            "user": {
+                "user_name": "test-user"
+            }
+        });
+
+        // カレントディレクトリを一時ディレクトリに変更
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Act
+        let result = TemplateManager::render_template(template_name, &context).await;
+
+        // Assert
+        assert!(result.is_err(), "Template with invalid syntax should fail");
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+}

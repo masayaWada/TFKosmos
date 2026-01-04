@@ -111,3 +111,422 @@ async fn validate_template(
         .map(Json)
         .map_err(|e| ApiError::Internal(e.to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum_test::TestServer;
+    use serde_json::json;
+    use std::fs;
+    use tempfile::TempDir;
+    use tower::ServiceBuilder;
+    use tower_http::cors::CorsLayer;
+
+    fn create_test_app() -> Router {
+        Router::new()
+            .nest("/api/templates", router())
+            .layer(ServiceBuilder::new().layer(CorsLayer::permissive()))
+    }
+
+    #[tokio::test]
+    async fn test_list_templates_endpoint() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let default_template_dir = temp_dir.path().join("templates_default/terraform/aws");
+        fs::create_dir_all(&default_template_dir).unwrap();
+        fs::write(
+            default_template_dir.join("iam_user.tf.j2"),
+            "default template"
+        ).unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        // Act
+        let response = server.get("/api/templates").await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            200,
+            "List templates endpoint should return OK (200), got {}",
+            status_u16
+        );
+        let body: serde_json::Value = response.json();
+        assert!(body.get("templates").is_some(), "Response should have templates field");
+        let templates = body.get("templates").unwrap().as_array().unwrap();
+        assert!(!templates.is_empty(), "Should have at least one template");
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_template_endpoint() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let user_template_dir = temp_dir.path().join("templates_user/terraform");
+        fs::create_dir_all(&user_template_dir).unwrap();
+
+        let template_name = "test_template.tf.j2";
+        let template_content = "test content";
+        fs::write(user_template_dir.join(template_name), template_content).unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        // Act
+        let encoded_name = urlencoding::encode(template_name);
+        let response = server
+            .get(&format!("/api/templates/{}?source=user", encoded_name))
+            .await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            200,
+            "Get template endpoint should return OK (200), got {}",
+            status_u16
+        );
+        let body: serde_json::Value = response.json();
+        assert_eq!(
+            body.get("source").and_then(|v| v.as_str()),
+            Some("user"),
+            "Source should be user"
+        );
+        assert_eq!(
+            body.get("content").and_then(|v| v.as_str()),
+            Some(template_content),
+            "Content should match"
+        );
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_template_not_found() {
+        // Arrange
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        // Act
+        let encoded_name = urlencoding::encode("nonexistent_template.tf.j2");
+        let response = server
+            .get(&format!("/api/templates/{}", encoded_name))
+            .await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            404,
+            "Get template endpoint should return NOT_FOUND (404), got {}",
+            status_u16
+        );
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_create_template_endpoint() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let user_template_dir = temp_dir.path().join("templates_user/terraform");
+        fs::create_dir_all(&user_template_dir).unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let template_name = "new_template.tf.j2";
+        let template_content = "new template content";
+
+        // Act
+        let encoded_name = urlencoding::encode(template_name);
+        let response = server
+            .post(&format!("/api/templates/{}", encoded_name))
+            .json(&json!({
+                "content": template_content
+            }))
+            .await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            200,
+            "Create template endpoint should return OK (200), got {}",
+            status_u16
+        );
+        let body: serde_json::Value = response.json();
+        assert!(
+            body.get("message").is_some(),
+            "Response should have message field"
+        );
+
+        // テンプレートファイルが作成されたことを確認
+        let template_path = user_template_dir.join(template_name);
+        assert!(template_path.exists(), "Template file should exist");
+        let saved_content = fs::read_to_string(&template_path).unwrap();
+        assert_eq!(saved_content, template_content, "Saved content should match");
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_update_template_endpoint() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let user_template_dir = temp_dir.path().join("templates_user/terraform");
+        fs::create_dir_all(&user_template_dir).unwrap();
+
+        let template_name = "existing_template.tf.j2";
+        fs::write(user_template_dir.join(template_name), "old content").unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let new_content = "updated content";
+
+        // Act
+        let encoded_name = urlencoding::encode(template_name);
+        let response = server
+            .put(&format!("/api/templates/{}", encoded_name))
+            .json(&json!({
+                "content": new_content
+            }))
+            .await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            200,
+            "Update template endpoint should return OK (200), got {}",
+            status_u16
+        );
+        
+        // テンプレートファイルが更新されたことを確認
+        let template_path = user_template_dir.join(template_name);
+        let saved_content = fs::read_to_string(&template_path).unwrap();
+        assert_eq!(saved_content, new_content, "Content should be updated");
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_delete_template_endpoint() {
+        // Arrange: 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let user_template_dir = temp_dir.path().join("templates_user/terraform");
+        fs::create_dir_all(&user_template_dir).unwrap();
+
+        let template_name = "template_to_delete.tf.j2";
+        let template_path = user_template_dir.join(template_name);
+        fs::write(&template_path, "content").unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        // Act
+        let encoded_name = urlencoding::encode(template_name);
+        let response = server
+            .delete(&format!("/api/templates/{}", encoded_name))
+            .await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            200,
+            "Delete template endpoint should return OK (200), got {}",
+            status_u16
+        );
+        let body: serde_json::Value = response.json();
+        assert!(
+            body.get("message").is_some(),
+            "Response should have message field"
+        );
+
+        // テンプレートファイルが削除されたことを確認
+        assert!(!template_path.exists(), "Template file should be deleted");
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_delete_template_not_found() {
+        // Arrange
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        // Act
+        let encoded_name = urlencoding::encode("nonexistent_template.tf.j2");
+        let response = server
+            .delete(&format!("/api/templates/{}", encoded_name))
+            .await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            500,
+            "Delete template endpoint should return INTERNAL_SERVER_ERROR (500), got {}",
+            status_u16
+        );
+
+        // 元のディレクトリに戻す
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_preview_template_endpoint() {
+        // Arrange
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let template_name = "iam_user.tf.j2";
+        let template_content = r#"resource "aws_iam_user" "{{ resource_name }}" {
+  name = "{{ user.user_name }}"
+}"#;
+
+        // Act
+        let encoded_name = urlencoding::encode(template_name);
+        let response = server
+            .post(&format!("/api/templates/preview/{}", encoded_name))
+            .json(&json!({
+                "content": template_content,
+                "context": {
+                    "resource_name": "test_user",
+                    "user": {
+                        "user_name": "test-user"
+                    }
+                }
+            }))
+            .await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            200,
+            "Preview template endpoint should return OK (200), got {}",
+            status_u16
+        );
+        let body: serde_json::Value = response.json();
+        assert!(body.get("preview").is_some(), "Response should have preview field");
+        let preview = body.get("preview").unwrap().as_str().unwrap();
+        assert!(preview.contains("test_user"), "Preview should contain resource_name");
+        assert!(preview.contains("test-user"), "Preview should contain user_name");
+    }
+
+    #[tokio::test]
+    async fn test_validate_template_endpoint_valid() {
+        // Arrange
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let template_name = "iam_user.tf.j2";
+        let template_content = r#"resource "aws_iam_user" "{{ resource_name }}" {
+  name = "{{ user.user_name }}"
+}"#;
+
+        // Act
+        let encoded_name = urlencoding::encode(template_name);
+        let response = server
+            .post(&format!("/api/templates/validate/{}", encoded_name))
+            .json(&json!({
+                "content": template_content
+            }))
+            .await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            200,
+            "Validate template endpoint should return OK (200), got {}",
+            status_u16
+        );
+        let body: serde_json::Value = response.json();
+        assert_eq!(
+            body.get("valid").and_then(|v| v.as_bool()),
+            Some(true),
+            "Template should be valid"
+        );
+        assert_eq!(
+            body.get("errors").and_then(|v| v.as_array()).unwrap().len(),
+            0,
+            "Should have no errors"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_template_endpoint_invalid() {
+        // Arrange
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let template_name = "iam_user.tf.j2";
+        let template_content = r#"resource "aws_iam_user" "{{ resource_name" {
+  name = "{{ user.user_name }}"
+}"#;  // 閉じ括弧がない
+
+        // Act
+        let encoded_name = urlencoding::encode(template_name);
+        let response = server
+            .post(&format!("/api/templates/validate/{}", encoded_name))
+            .json(&json!({
+                "content": template_content
+            }))
+            .await;
+
+        // Assert
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            200,
+            "Validate template endpoint should return OK (200), got {}",
+            status_u16
+        );
+        let body: serde_json::Value = response.json();
+        assert_eq!(
+            body.get("valid").and_then(|v| v.as_bool()),
+            Some(false),
+            "Template should be invalid"
+        );
+        assert!(
+            body.get("errors").and_then(|v| v.as_array()).unwrap().len() > 0,
+            "Should have errors"
+        );
+    }
+}
