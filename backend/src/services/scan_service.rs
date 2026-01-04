@@ -187,6 +187,25 @@ impl ScanService {
         let results = SCAN_RESULTS.read().await;
         results.get(scan_id).and_then(|result| result.data.clone())
     }
+
+    /// テスト用: スキャン結果を直接挿入する
+    #[cfg(test)]
+    pub async fn insert_test_scan_data(
+        scan_id: String,
+        config: ScanConfig,
+        data: serde_json::Value,
+    ) {
+        let scan_result = ScanResult {
+            scan_id: scan_id.clone(),
+            status: "completed".to_string(),
+            progress: Some(100),
+            message: Some("Test scan completed".to_string()),
+            _config: config,
+            data: Some(data),
+        };
+
+        SCAN_RESULTS.write().await.insert(scan_id, scan_result);
+    }
 }
 
 #[cfg(test)]

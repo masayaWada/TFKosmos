@@ -677,3 +677,410 @@ impl TerraformGenerator {
         script
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    // ========================================
+    // get_templates_for_provider のテスト
+    // ========================================
+
+    #[test]
+    fn test_get_templates_for_aws() {
+        let templates = TerraformGenerator::get_templates_for_provider("aws");
+        assert_eq!(templates.len(), 4);
+
+        let template_types: Vec<&str> = templates.iter().map(|t| t.resource_type).collect();
+        assert!(template_types.contains(&"users"));
+        assert!(template_types.contains(&"groups"));
+        assert!(template_types.contains(&"roles"));
+        assert!(template_types.contains(&"policies"));
+    }
+
+    #[test]
+    fn test_get_templates_for_azure() {
+        let templates = TerraformGenerator::get_templates_for_provider("azure");
+        assert_eq!(templates.len(), 2);
+
+        let template_types: Vec<&str> = templates.iter().map(|t| t.resource_type).collect();
+        assert!(template_types.contains(&"role_definitions"));
+        assert!(template_types.contains(&"role_assignments"));
+    }
+
+    #[test]
+    fn test_get_templates_for_unknown_provider() {
+        let templates = TerraformGenerator::get_templates_for_provider("unknown");
+        assert_eq!(templates.len(), 0);
+    }
+
+    // ========================================
+    // get_resource_name のテスト
+    // ========================================
+
+    #[test]
+    fn test_get_resource_name_user() {
+        let resource = json!({
+            "user_name": "test-user",
+            "arn": "arn:aws:iam::123456789012:user/test-user"
+        });
+
+        let result = TerraformGenerator::get_resource_name(&resource, "users");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "test-user");
+    }
+
+    #[test]
+    fn test_get_resource_name_group() {
+        let resource = json!({
+            "group_name": "test-group",
+            "arn": "arn:aws:iam::123456789012:group/test-group"
+        });
+
+        let result = TerraformGenerator::get_resource_name(&resource, "groups");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "test-group");
+    }
+
+    #[test]
+    fn test_get_resource_name_role() {
+        let resource = json!({
+            "role_name": "test-role",
+            "arn": "arn:aws:iam::123456789012:role/test-role"
+        });
+
+        let result = TerraformGenerator::get_resource_name(&resource, "roles");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "test-role");
+    }
+
+    #[test]
+    fn test_get_resource_name_policy() {
+        let resource = json!({
+            "policy_name": "test-policy",
+            "arn": "arn:aws:iam::123456789012:policy/test-policy"
+        });
+
+        let result = TerraformGenerator::get_resource_name(&resource, "policies");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "test-policy");
+    }
+
+    #[test]
+    fn test_get_resource_name_missing_field() {
+        let resource = json!({
+            "arn": "arn:aws:iam::123456789012:user/test-user"
+        });
+
+        let result = TerraformGenerator::get_resource_name(&resource, "users");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing user_name"));
+    }
+
+    #[test]
+    fn test_get_resource_name_generic() {
+        let resource = json!({
+            "name": "generic-resource"
+        });
+
+        let result = TerraformGenerator::get_resource_name(&resource, "unknown_type");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "generic-resource");
+    }
+
+    // ========================================
+    // generate_import_command のテスト
+    // ========================================
+
+    #[test]
+    fn test_generate_import_command_aws_user() {
+        let resource = json!({
+            "user_name": "test-user",
+            "arn": "arn:aws:iam::123456789012:user/test-user"
+        });
+
+        let result = TerraformGenerator::generate_import_command(&resource, "users", "aws");
+        assert!(result.is_ok());
+
+        let import_cmd = result.unwrap();
+        assert!(import_cmd.contains("terraform import"));
+        assert!(import_cmd.contains("aws_iam_user.test_user"));
+        assert!(import_cmd.contains("arn:aws:iam::123456789012:user/test-user"));
+    }
+
+    #[test]
+    fn test_generate_import_command_aws_group() {
+        let resource = json!({
+            "group_name": "test-group",
+            "arn": "arn:aws:iam::123456789012:group/test-group"
+        });
+
+        let result = TerraformGenerator::generate_import_command(&resource, "groups", "aws");
+        assert!(result.is_ok());
+
+        let import_cmd = result.unwrap();
+        assert!(import_cmd.contains("terraform import"));
+        assert!(import_cmd.contains("aws_iam_group.test_group"));
+        assert!(import_cmd.contains("arn:aws:iam::123456789012:group/test-group"));
+    }
+
+    #[test]
+    fn test_generate_import_command_aws_role() {
+        let resource = json!({
+            "role_name": "test-role",
+            "arn": "arn:aws:iam::123456789012:role/test-role"
+        });
+
+        let result = TerraformGenerator::generate_import_command(&resource, "roles", "aws");
+        assert!(result.is_ok());
+
+        let import_cmd = result.unwrap();
+        assert!(import_cmd.contains("terraform import"));
+        assert!(import_cmd.contains("aws_iam_role.test_role"));
+        assert!(import_cmd.contains("arn:aws:iam::123456789012:role/test-role"));
+    }
+
+    #[test]
+    fn test_generate_import_command_aws_policy() {
+        let resource = json!({
+            "policy_name": "test-policy",
+            "arn": "arn:aws:iam::123456789012:policy/test-policy"
+        });
+
+        let result = TerraformGenerator::generate_import_command(&resource, "policies", "aws");
+        assert!(result.is_ok());
+
+        let import_cmd = result.unwrap();
+        assert!(import_cmd.contains("terraform import"));
+        assert!(import_cmd.contains("aws_iam_policy.test_policy"));
+        assert!(import_cmd.contains("arn:aws:iam::123456789012:policy/test-policy"));
+    }
+
+    #[test]
+    fn test_generate_import_command_unsupported_provider() {
+        let resource = json!({
+            "user_name": "test-user",
+            "arn": "arn:aws:iam::123456789012:user/test-user"
+        });
+
+        let result = TerraformGenerator::generate_import_command(&resource, "users", "gcp");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unsupported provider/resource type combination"));
+    }
+
+    // ========================================
+    // generate_sh_import_script のテスト
+    // ========================================
+
+    #[test]
+    fn test_generate_sh_import_script() {
+        let commands = vec![
+            "terraform import aws_iam_user.test_user arn:aws:iam::123456789012:user/test-user"
+                .to_string(),
+            "terraform import aws_iam_group.test_group arn:aws:iam::123456789012:group/test-group"
+                .to_string(),
+        ];
+
+        let script = TerraformGenerator::generate_sh_import_script(&commands);
+
+        assert!(script.contains("#!/bin/bash"));
+        assert!(script.contains("set -e"));
+        assert!(script.contains("terraform import aws_iam_user.test_user"));
+        assert!(script.contains("terraform import aws_iam_group.test_group"));
+    }
+
+    // ========================================
+    // generate_ps1_import_script のテスト
+    // ========================================
+
+    #[test]
+    fn test_generate_ps1_import_script() {
+        let commands = vec![
+            "terraform import aws_iam_user.test_user arn:aws:iam::123456789012:user/test-user"
+                .to_string(),
+            "terraform import aws_iam_group.test_group arn:aws:iam::123456789012:group/test-group"
+                .to_string(),
+        ];
+
+        let script = TerraformGenerator::generate_ps1_import_script(&commands);
+
+        assert!(script.contains("$ErrorActionPreference"));
+        assert!(script.contains("terraform import aws_iam_user.test_user"));
+        assert!(script.contains("terraform import aws_iam_group.test_group"));
+    }
+
+    // ========================================
+    // generate_readme のテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_generate_readme() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path();
+
+        let config = GenerationConfig {
+            output_path: output_path.to_str().unwrap().to_string(),
+            file_split_rule: "single".to_string(),
+            naming_convention: "snake_case".to_string(),
+            import_script_format: "sh".to_string(),
+            generate_readme: true,
+            selected_resources: HashMap::new(),
+        };
+
+        let files = vec!["users.tf".to_string(), "groups.tf".to_string()];
+
+        let result = TerraformGenerator::generate_readme(&config, &output_path.to_path_buf(), &files).await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "README.md");
+
+        let readme_path = output_path.join("README.md");
+        assert!(readme_path.exists());
+
+        let readme_content = std::fs::read_to_string(readme_path).unwrap();
+        assert!(readme_content.contains("# Terraform Code Generation"));
+        assert!(readme_content.contains("users.tf"));
+        assert!(readme_content.contains("groups.tf"));
+        assert!(readme_content.contains("terraform init"));
+    }
+
+    // ========================================
+    // generate_import_script のテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_generate_import_script_with_resources() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path();
+
+        let scan_data = json!({
+            "provider": "aws",
+            "users": [
+                {
+                    "user_name": "test-user",
+                    "arn": "arn:aws:iam::123456789012:user/test-user"
+                }
+            ]
+        });
+
+        let config = GenerationConfig {
+            output_path: output_path.to_str().unwrap().to_string(),
+            file_split_rule: "single".to_string(),
+            naming_convention: "snake_case".to_string(),
+            import_script_format: "sh".to_string(),
+            generate_readme: true,
+            selected_resources: HashMap::new(),
+        };
+
+        let selected_resources = HashMap::new();
+
+        let result = TerraformGenerator::generate_import_script(
+            &scan_data,
+            &config,
+            &selected_resources,
+            &output_path.to_path_buf(),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert!(result.as_ref().unwrap().is_some());
+
+        let script_name = result.unwrap().unwrap();
+        assert_eq!(script_name, "import.sh");
+
+        let script_path = output_path.join(&script_name);
+        assert!(script_path.exists());
+
+        let script_content = std::fs::read_to_string(script_path).unwrap();
+        assert!(script_content.contains("#!/bin/bash"));
+        assert!(script_content.contains("terraform import"));
+        assert!(script_content.contains("aws_iam_user.test_user"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_import_script_ps1_format() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path();
+
+        let scan_data = json!({
+            "provider": "aws",
+            "users": [
+                {
+                    "user_name": "test-user",
+                    "arn": "arn:aws:iam::123456789012:user/test-user"
+                }
+            ]
+        });
+
+        let config = GenerationConfig {
+            output_path: output_path.to_str().unwrap().to_string(),
+            file_split_rule: "single".to_string(),
+            naming_convention: "snake_case".to_string(),
+            import_script_format: "ps1".to_string(),
+            generate_readme: true,
+            selected_resources: HashMap::new(),
+        };
+
+        let selected_resources = HashMap::new();
+
+        let result = TerraformGenerator::generate_import_script(
+            &scan_data,
+            &config,
+            &selected_resources,
+            &output_path.to_path_buf(),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert!(result.as_ref().unwrap().is_some());
+
+        let script_name = result.unwrap().unwrap();
+        assert_eq!(script_name, "import.ps1");
+
+        let script_path = output_path.join(&script_name);
+        assert!(script_path.exists());
+
+        let script_content = std::fs::read_to_string(script_path).unwrap();
+        assert!(script_content.contains("$ErrorActionPreference"));
+        assert!(script_content.contains("terraform import"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_import_script_no_resources() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path();
+
+        let scan_data = json!({
+            "provider": "aws",
+            "users": []
+        });
+
+        let config = GenerationConfig {
+            output_path: output_path.to_str().unwrap().to_string(),
+            file_split_rule: "single".to_string(),
+            naming_convention: "snake_case".to_string(),
+            import_script_format: "sh".to_string(),
+            generate_readme: true,
+            selected_resources: HashMap::new(),
+        };
+
+        let selected_resources = HashMap::new();
+
+        let result = TerraformGenerator::generate_import_script(
+            &scan_data,
+            &config,
+            &selected_resources,
+            &output_path.to_path_buf(),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+}

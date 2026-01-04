@@ -1,19 +1,30 @@
-use anyhow::{anyhow, Context, Result};
-use aws_sdk_iam::Client as IamClient;
+//! AWS IAMスキャナー
+//!
+//! AWS IAMリソース（ユーザー、グループ、ロール、ポリシー）をスキャンし、
+//! Terraform生成用のデータ構造に変換します。
+
+use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 use crate::domain::iam_policy::IamPolicyDocument;
 use crate::infra::aws::client_factory::AwsClientFactory;
+use crate::infra::aws::iam_client_trait::IamClientOps;
+use crate::infra::aws::real_iam_client::RealIamClient;
 use crate::models::ScanConfig;
 
-pub struct AwsIamScanner {
+/// AWS IAMスキャナー
+///
+/// IAMクライアントを抽象化することで、テスト時にモックを注入可能にしています。
+pub struct AwsIamScanner<C: IamClientOps> {
     config: ScanConfig,
-    iam_client: IamClient,
+    iam_client: Arc<C>,
 }
 
-impl AwsIamScanner {
+impl AwsIamScanner<RealIamClient> {
+    /// 本番用のスキャナーを作成
     pub async fn new(config: ScanConfig) -> Result<Self> {
         let iam_client = AwsClientFactory::create_iam_client(
             config.profile.clone(),
@@ -29,9 +40,24 @@ impl AwsIamScanner {
             )
         })?;
 
-        Ok(Self { config, iam_client })
+        Ok(Self {
+            config,
+            iam_client: Arc::new(RealIamClient::new(iam_client)),
+        })
+    }
+}
+
+impl<C: IamClientOps> AwsIamScanner<C> {
+    /// テスト用：モッククライアントを使用してスキャナーを作成
+    #[cfg(test)]
+    pub fn new_with_client(config: ScanConfig, client: C) -> Self {
+        Self {
+            config,
+            iam_client: Arc::new(client),
+        }
     }
 
+    /// IAMリソースをスキャン
     pub async fn scan(
         &self,
         progress_callback: Box<dyn Fn(u32, String) + Send + Sync>,
@@ -134,60 +160,25 @@ impl AwsIamScanner {
             results.insert("policies".to_string(), Value::Array(Vec::new()));
         }
 
-        // Attachments
-        if scan_targets.get("attachments").copied().unwrap_or(false) {
-            debug!("IAM Attachmentsのスキャンを開始");
-            progress_callback(
-                (completed_targets * 100 / total_targets) as u32,
-                "IAM Attachmentsのスキャン中...".to_string(),
-            );
-            let attachments = self.scan_attachments().await?;
-            let count = attachments.len();
-            results.insert("attachments".to_string(), Value::Array(attachments));
-            completed_targets += 1;
-            debug!(count, "IAM Attachmentsのスキャン完了");
-            progress_callback(
-                (completed_targets * 100 / total_targets) as u32,
-                format!("IAM Attachmentsのスキャン完了: {}件", count),
-            );
-        } else {
-            results.insert("attachments".to_string(), Value::Array(Vec::new()));
-        }
+        // リソース間の接続情報を取得
+        let attachments = self.scan_attachments().await?;
+        results.insert("attachments".to_string(), attachments);
 
-        // Cleanup (Access Keys, Login Profiles, MFA) - usersがtrueの場合に自動的にスキャン
-        // 注: cleanup単独の指定は後方互換性のために残すが、usersがtrueでもスキャンされる
-        if scan_targets.get("users").copied().unwrap_or(false)
-            || scan_targets.get("cleanup").copied().unwrap_or(false)
-        {
-            debug!("IAM Cleanup（アクセスキー、ログインプロファイル、MFA）のスキャンを開始");
-            progress_callback(
-                (completed_targets * 100 / total_targets) as u32,
-                "IAM Users関連情報（アクセスキー、ログインプロファイル、MFA）のスキャン中...".to_string(),
-            );
-            let cleanup = self.scan_cleanup().await?;
-            let count = cleanup.len();
-            results.insert("cleanup".to_string(), Value::Array(cleanup));
-            debug!(count, "IAM Cleanupのスキャン完了");
-            progress_callback(
-                (completed_targets * 100 / total_targets) as u32,
-                format!("IAM Users関連情報のスキャン完了: {}件", count),
-            );
-        } else {
-            results.insert("cleanup".to_string(), Value::Array(Vec::new()));
-        }
+        // クリーンアップ（マネージドポリシーのバージョン等を補完）
+        self.scan_cleanup(&mut results).await?;
 
-        info!(elapsed_ms = start_time.elapsed().as_millis(), "AWS IAMスキャン完了");
-        progress_callback(
-            100,
-            format!(
-                "AWS IAMスキャン完了: 合計{}ms",
-                start_time.elapsed().as_millis()
-            ),
+        let duration = start_time.elapsed();
+        info!(
+            "AWS IAMスキャン完了 (所要時間: {:.2}秒)",
+            duration.as_secs_f64()
         );
+        progress_callback(100, "AWS IAMスキャンが完了しました".to_string());
+
         Ok(Value::Object(results))
     }
 
-    fn apply_name_prefix_filter(&self, name: &str) -> bool {
+    /// 名前プレフィックスフィルタを適用
+    pub fn apply_name_prefix_filter(&self, name: &str) -> bool {
         if let Some(prefix) = self.config.filters.get("name_prefix") {
             name.starts_with(prefix)
         } else {
@@ -195,603 +186,285 @@ impl AwsIamScanner {
         }
     }
 
-    async fn scan_users(&self) -> Result<Vec<Value>> {
+    /// IAMユーザーをスキャン
+    pub async fn scan_users(&self) -> Result<Vec<Value>> {
+        let users_info = self.iam_client.list_users().await?;
         let mut users = Vec::new();
-        let mut paginator = self
-            .iam_client
-            .list_users()
-            .into_paginator()
-            .page_size(100)
-            .send();
 
-        while let Some(page_result) = paginator.next().await {
-            let page = page_result.map_err(|e| {
-                anyhow!(
-                    "Failed to list users. Error: {}. \
-                    This may be due to authentication issues or insufficient IAM permissions. \
-                    Profile: {:?}. \
-                    Please ensure you have run 'aws login' or configured AWS credentials properly, \
-                    and that your credentials have the 'iam:ListUsers' permission. \
-                    You can test your credentials by running: aws sts get-caller-identity",
-                    e,
-                    self.config.profile
-                )
-            })?;
-
-            for user in page.users().iter() {
-                let user_name = user.user_name().to_string();
-
-                if !self.apply_name_prefix_filter(&user_name) {
-                    continue;
-                }
-
-                let create_date = user.create_date().secs();
-                let mut user_json = json!({
-                    "user_name": user_name,
-                    "user_id": user.user_id().to_string(),
-                    "arn": user.arn().to_string(),
-                    "create_date": create_date,
-                    "path": user.path().to_string(),
-                });
-
-                // タグを取得
-                if let Ok(tags_result) = self
-                    .iam_client
-                    .list_user_tags()
-                    .user_name(&user_name)
-                    .send()
-                    .await
-                {
-                    let tags = tags_result.tags();
-                    if !tags.is_empty() {
-                        let tags_map: HashMap<String, String> = tags
-                            .iter()
-                            .filter_map(|tag| {
-                                Some((tag.key().to_string(), tag.value().to_string()))
-                            })
-                            .collect();
-                        if !tags_map.is_empty() {
-                            user_json["tags"] = json!(tags_map);
-                        }
-                    }
-                }
-
-                users.push(user_json);
+        for user in users_info {
+            if !self.apply_name_prefix_filter(&user.user_name) {
+                continue;
             }
+
+            let mut user_json = json!({
+                "user_name": user.user_name,
+                "user_id": user.user_id,
+                "arn": user.arn,
+                "create_date": user.create_date,
+                "path": user.path,
+            });
+
+            if !user.tags.is_empty() {
+                user_json["tags"] = json!(user.tags);
+            }
+
+            users.push(user_json);
         }
 
         Ok(users)
     }
 
-    async fn scan_groups(&self) -> Result<Vec<Value>> {
+    /// IAMグループをスキャン
+    pub async fn scan_groups(&self) -> Result<Vec<Value>> {
+        let groups_info = self.iam_client.list_groups().await?;
         let mut groups = Vec::new();
-        let mut paginator = self
-            .iam_client
-            .list_groups()
-            .into_paginator()
-            .page_size(100)
-            .send();
 
-        while let Some(page_result) = paginator.next().await {
-            let page = page_result.map_err(|e| {
-                anyhow!(
-                    "Failed to list groups. Error: {}. Profile: {:?}. \
-                    Please ensure your credentials have the 'iam:ListGroups' permission.",
-                    e,
-                    self.config.profile
-                )
-            })?;
-
-            for group in page.groups().iter() {
-                let group_name = group.group_name().to_string();
-
-                if !self.apply_name_prefix_filter(&group_name) {
-                    continue;
-                }
-
-                let create_date = group.create_date().secs();
-                let group_json = json!({
-                    "group_name": group_name,
-                    "group_id": group.group_id().to_string(),
-                    "arn": group.arn().to_string(),
-                    "create_date": create_date,
-                    "path": group.path().to_string(),
-                });
-
-                // タグを取得（list_group_tagsは存在しない可能性があるため、スキップ）
-                // AWS SDK for Rustのバージョンによっては利用できない場合がある
-
-                groups.push(group_json);
+        for group in groups_info {
+            if !self.apply_name_prefix_filter(&group.group_name) {
+                continue;
             }
+
+            let group_json = json!({
+                "group_name": group.group_name,
+                "group_id": group.group_id,
+                "arn": group.arn,
+                "create_date": group.create_date,
+                "path": group.path,
+            });
+
+            groups.push(group_json);
         }
 
         Ok(groups)
     }
 
-    async fn scan_roles(&self) -> Result<Vec<Value>> {
+    /// IAMロールをスキャン
+    pub async fn scan_roles(&self) -> Result<Vec<Value>> {
+        let roles_info = self.iam_client.list_roles().await?;
         let mut roles = Vec::new();
-        let mut paginator = self
-            .iam_client
-            .list_roles()
-            .into_paginator()
-            .page_size(100)
-            .send();
 
-        while let Some(page_result) = paginator.next().await {
-            let page = page_result.map_err(|e| {
-                anyhow!(
-                    "Failed to list roles. Error: {}. Profile: {:?}. \
-                    Please ensure your credentials have the 'iam:ListRoles' permission.",
-                    e,
-                    self.config.profile
-                )
-            })?;
-
-            for role in page.roles().iter() {
-                let role_name = role.role_name().to_string();
-
-                if !self.apply_name_prefix_filter(&role_name) {
-                    continue;
-                }
-
-                let create_date = role.create_date().secs();
-
-                // Assume Role Policy Documentを取得してパース
-                let assume_role_policy_doc = role.assume_role_policy_document().unwrap_or("").to_string();
-                let assume_role_statements = Self::parse_assume_role_policy(&assume_role_policy_doc);
-
-                let mut role_json = json!({
-                    "role_name": role_name,
-                    "role_id": role.role_id().to_string(),
-                    "arn": role.arn().to_string(),
-                    "create_date": create_date,
-                    "path": role.path().to_string(),
-                    "assume_role_policy_document": assume_role_policy_doc,
-                });
-
-                // パースに成功した場合は構造化データも追加
-                if !assume_role_statements.is_empty() {
-                    role_json["assume_role_statements"] = json!(assume_role_statements);
-                }
-
-                // タグを取得
-                if let Ok(tags_result) = self
-                    .iam_client
-                    .list_role_tags()
-                    .role_name(&role_name)
-                    .send()
-                    .await
-                {
-                    let tags = tags_result.tags();
-                    if !tags.is_empty() {
-                        let tags_map: HashMap<String, String> = tags
-                            .iter()
-                            .filter_map(|tag| {
-                                Some((tag.key().to_string(), tag.value().to_string()))
-                            })
-                            .collect();
-                        if !tags_map.is_empty() {
-                            role_json["tags"] = json!(tags_map);
-                        }
-                    }
-                }
-
-                roles.push(role_json);
+        for role in roles_info {
+            if !self.apply_name_prefix_filter(&role.role_name) {
+                continue;
             }
+
+            let assume_role_statements = role
+                .assume_role_policy_document
+                .as_deref()
+                .map(Self::parse_assume_role_policy)
+                .unwrap_or_default();
+
+            let mut role_json = json!({
+                "role_name": role.role_name,
+                "role_id": role.role_id,
+                "arn": role.arn,
+                "create_date": role.create_date,
+                "path": role.path,
+                "assume_role_statements": assume_role_statements,
+            });
+
+            if !role.tags.is_empty() {
+                role_json["tags"] = json!(role.tags);
+            }
+
+            roles.push(role_json);
         }
 
         Ok(roles)
     }
 
-    async fn scan_policies(&self) -> Result<Vec<Value>> {
+    /// IAMポリシーをスキャン
+    pub async fn scan_policies(&self) -> Result<Vec<Value>> {
+        let policies_info = self.iam_client.list_policies().await?;
         let mut policies = Vec::new();
 
-        // カスタマー管理ポリシー
-        let mut paginator = self
-            .iam_client
-            .list_policies()
-            .scope(aws_sdk_iam::types::PolicyScopeType::Local)
-            .into_paginator()
-            .page_size(100)
-            .send();
-
-        while let Some(page_result) = paginator.next().await {
-            let page = page_result.map_err(|e| {
-                anyhow!(
-                    "Failed to list policies. Error: {}. Profile: {:?}. \
-                    Please ensure your credentials have the 'iam:ListPolicies' permission.",
-                    e,
-                    self.config.profile
-                )
-            })?;
-
-            for policy in page.policies().iter() {
-                let policy_name = policy.policy_name().unwrap_or("").to_string();
-
-                if !self.apply_name_prefix_filter(&policy_name) {
-                    continue;
-                }
-
-                let policy_arn = policy.arn().unwrap_or("").to_string();
-                let create_date = policy.create_date().map(|d| d.secs()).unwrap_or(0);
-                let update_date = policy.update_date().map(|d| d.secs()).unwrap_or(0);
-                let mut policy_json = json!({
-                    "policy_name": policy_name,
-                    "policy_id": policy.policy_id().unwrap_or("").to_string(),
-                    "arn": policy_arn,
-                    "create_date": create_date,
-                    "update_date": update_date,
-                    "path": policy.path().unwrap_or("").to_string(),
-                    "default_version_id": policy.default_version_id().unwrap_or("").to_string(),
-                    "attachment_count": policy.attachment_count().unwrap_or(0),
-                    "is_attachable": policy.is_attachable(),
-                });
-
-                // ポリシードキュメントを取得
-                if let Some(version_id) = policy.default_version_id() {
-                    if let Ok(version_result) = self
-                        .iam_client
-                        .get_policy_version()
-                        .policy_arn(&policy_arn)
-                        .version_id(version_id)
-                        .send()
-                        .await
-                    {
-                        if let Some(document) =
-                            version_result.policy_version().and_then(|v| v.document())
-                        {
-                            // ポリシードキュメントをパースして構造化
-                            // AWS IAM APIから返されるdocumentはURLエンコードされた文字列
-                            let decoded_document = urlencoding::decode(document)
-                                .unwrap_or_else(|_| std::borrow::Cow::Borrowed(document));
-
-                            match IamPolicyDocument::from_json_str(&decoded_document) {
-                                Ok(parsed_doc) => {
-                                    // パース成功: 構造化されたステートメントを保存
-                                    let statements_json: Vec<Value> = parsed_doc.statements.iter().map(|stmt| {
-                                        let mut stmt_json = json!({
-                                            "effect": stmt.effect,
-                                        });
-
-                                        if let Some(sid) = &stmt.sid {
-                                            stmt_json["sid"] = json!(sid);
-                                        }
-
-                                        if let Some(action) = &stmt.action {
-                                            stmt_json["actions"] = json!(action.as_vec());
-                                        }
-
-                                        if let Some(resource) = &stmt.resource {
-                                            stmt_json["resources"] = json!(resource.as_vec());
-                                        }
-
-                                        if let Some(principal) = &stmt.principal {
-                                            stmt_json["principal"] = principal.clone();
-                                        }
-
-                                        if let Some(condition) = &stmt.condition {
-                                            stmt_json["condition"] = condition.clone();
-                                        }
-
-                                        if let Some(not_action) = &stmt.not_action {
-                                            stmt_json["not_actions"] = json!(not_action.as_vec());
-                                        }
-
-                                        if let Some(not_resource) = &stmt.not_resource {
-                                            stmt_json["not_resources"] = json!(not_resource.as_vec());
-                                        }
-
-                                        stmt_json
-                                    }).collect();
-
-                                    policy_json["statements"] = json!(statements_json);
-
-                                    // バージョンも保存
-                                    if let Some(version) = parsed_doc.version {
-                                        policy_json["policy_version"] = json!(version);
-                                    }
-                                }
-                                Err(e) => {
-                                    // パース失敗: 元のドキュメントをそのまま保存（後方互換性）
-                                    warn!("Failed to parse policy document for {}: {}. Falling back to raw document.", policy_name, e);
-                                    policy_json["policy_document"] = json!(decoded_document);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // タグを取得
-                if let Ok(tags_result) = self
-                    .iam_client
-                    .list_policy_tags()
-                    .policy_arn(&policy_arn)
-                    .send()
-                    .await
-                {
-                    let tags = tags_result.tags();
-                    if !tags.is_empty() {
-                        let tags_map: HashMap<String, String> = tags
-                            .iter()
-                            .filter_map(|tag| {
-                                Some((tag.key().to_string(), tag.value().to_string()))
-                            })
-                            .collect();
-                        if !tags_map.is_empty() {
-                            policy_json["tags"] = json!(tags_map);
-                        }
-                    }
-                }
-
-                policies.push(policy_json);
+        for policy in policies_info {
+            if !self.apply_name_prefix_filter(&policy.policy_name) {
+                continue;
             }
+
+            let policy_json = json!({
+                "policy_name": policy.policy_name,
+                "policy_id": policy.policy_id,
+                "arn": policy.arn,
+                "path": policy.path,
+                "default_version_id": policy.default_version_id,
+                "attachment_count": policy.attachment_count,
+                "create_date": policy.create_date,
+                "update_date": policy.update_date,
+                "description": policy.description,
+            });
+
+            policies.push(policy_json);
         }
 
         Ok(policies)
     }
 
-    async fn scan_attachments(&self) -> Result<Vec<Value>> {
-        let mut attachments = Vec::new();
+    /// リソース間の接続情報をスキャン
+    async fn scan_attachments(&self) -> Result<Value> {
+        let mut attachments = serde_json::Map::new();
 
-        // ユーザーへのポリシーアタッチメント
-        let mut users_paginator = self
-            .iam_client
-            .list_users()
-            .into_paginator()
-            .page_size(100)
-            .send();
-        while let Some(users_page_result) = users_paginator.next().await {
-            let users_page = users_page_result.map_err(|e| {
-                anyhow!(
-                    "Failed to list users for attachments. Error: {}. Profile: {:?}.",
-                    e,
-                    self.config.profile
-                )
-            })?;
-            for user in users_page.users().iter() {
-                let user_name = user.user_name().to_string();
-
-                // アタッチされたポリシー
-                if let Ok(attached_policies) = self
-                    .iam_client
-                    .list_attached_user_policies()
-                    .user_name(&user_name)
-                    .send()
-                    .await
-                {
-                    for policy in attached_policies.attached_policies().iter() {
-                        attachments.push(json!({
-                            "entity_type": "user",
-                            "entity_name": user_name.clone(),
-                            "policy_arn": policy.policy_arn().unwrap_or("").to_string(),
-                            "policy_name": policy.policy_name().unwrap_or("").to_string(),
-                            "policy_type": "managed",
-                        }));
-                    }
+        // UserとPolicyの接続
+        let mut user_policies = Vec::new();
+        if let Ok(users_info) = self.iam_client.list_users().await {
+            for user in users_info {
+                if !self.apply_name_prefix_filter(&user.user_name) {
+                    continue;
                 }
 
-                // インラインポリシー
-                if let Ok(inline_policies) = self
-                    .iam_client
-                    .list_user_policies()
-                    .user_name(&user_name)
-                    .send()
-                    .await
-                {
-                    for policy_name in inline_policies.policy_names().iter() {
-                        attachments.push(json!({
-                            "entity_type": "user",
-                            "entity_name": user_name.clone(),
+                // インラインポリシーを取得
+                if let Ok(inline_policies) = self.iam_client.list_user_policies(&user.user_name).await {
+                    for policy_name in inline_policies {
+                        user_policies.push(json!({
+                            "user_name": user.user_name,
                             "policy_name": policy_name,
                             "policy_type": "inline",
                         }));
                     }
                 }
-            }
-        }
 
-        // グループへのポリシーアタッチメント
-        let mut groups_paginator = self
-            .iam_client
-            .list_groups()
-            .into_paginator()
-            .page_size(100)
-            .send();
-        while let Some(groups_page_result) = groups_paginator.next().await {
-            let groups_page = groups_page_result.map_err(|e| {
-                anyhow!(
-                    "Failed to list groups for attachments. Error: {}. Profile: {:?}.",
-                    e,
-                    self.config.profile
-                )
-            })?;
-            for group in groups_page.groups().iter() {
-                let group_name = group.group_name().to_string();
-
-                // アタッチされたポリシー
-                if let Ok(attached_policies) = self
-                    .iam_client
-                    .list_attached_group_policies()
-                    .group_name(&group_name)
-                    .send()
-                    .await
-                {
-                    for policy in attached_policies.attached_policies().iter() {
-                        attachments.push(json!({
-                            "entity_type": "group",
-                            "entity_name": group_name.clone(),
-                            "policy_arn": policy.policy_arn().unwrap_or("").to_string(),
-                            "policy_name": policy.policy_name().unwrap_or("").to_string(),
+                // アタッチされたマネージドポリシーを取得
+                if let Ok(attached_policies) = self.iam_client.list_attached_user_policies(&user.user_name).await {
+                    for policy in attached_policies {
+                        user_policies.push(json!({
+                            "user_name": user.user_name,
+                            "policy_arn": policy.policy_arn,
                             "policy_type": "managed",
                         }));
                     }
                 }
+            }
+        }
+        attachments.insert("user_policies".to_string(), Value::Array(user_policies));
 
-                // インラインポリシー
-                if let Ok(inline_policies) = self
-                    .iam_client
-                    .list_group_policies()
-                    .group_name(&group_name)
-                    .send()
-                    .await
-                {
-                    for policy_name in inline_policies.policy_names().iter() {
-                        attachments.push(json!({
-                            "entity_type": "group",
-                            "entity_name": group_name.clone(),
+        // GroupとPolicyの接続
+        let mut group_policies = Vec::new();
+        if let Ok(groups_info) = self.iam_client.list_groups().await {
+            for group in groups_info {
+                if !self.apply_name_prefix_filter(&group.group_name) {
+                    continue;
+                }
+
+                // インラインポリシーを取得
+                if let Ok(inline_policies) = self.iam_client.list_group_policies(&group.group_name).await {
+                    for policy_name in inline_policies {
+                        group_policies.push(json!({
+                            "group_name": group.group_name,
                             "policy_name": policy_name,
                             "policy_type": "inline",
                         }));
                     }
                 }
-            }
-        }
 
-        // ロールへのポリシーアタッチメント
-        let mut roles_paginator = self
-            .iam_client
-            .list_roles()
-            .into_paginator()
-            .page_size(100)
-            .send();
-        while let Some(roles_page_result) = roles_paginator.next().await {
-            let roles_page = roles_page_result.map_err(|e| {
-                anyhow!(
-                    "Failed to list roles for attachments. Error: {}. Profile: {:?}.",
-                    e,
-                    self.config.profile
-                )
-            })?;
-            for role in roles_page.roles().iter() {
-                let role_name = role.role_name().to_string();
-
-                // アタッチされたポリシー
-                if let Ok(attached_policies) = self
-                    .iam_client
-                    .list_attached_role_policies()
-                    .role_name(&role_name)
-                    .send()
-                    .await
-                {
-                    for policy in attached_policies.attached_policies().iter() {
-                        attachments.push(json!({
-                            "entity_type": "role",
-                            "entity_name": role_name.clone(),
-                            "policy_arn": policy.policy_arn().unwrap_or("").to_string(),
-                            "policy_name": policy.policy_name().unwrap_or("").to_string(),
+                // アタッチされたマネージドポリシーを取得
+                if let Ok(attached_policies) = self.iam_client.list_attached_group_policies(&group.group_name).await {
+                    for policy in attached_policies {
+                        group_policies.push(json!({
+                            "group_name": group.group_name,
+                            "policy_arn": policy.policy_arn,
                             "policy_type": "managed",
                         }));
                     }
                 }
+            }
+        }
+        attachments.insert("group_policies".to_string(), Value::Array(group_policies));
 
-                // インラインポリシー
-                if let Ok(inline_policies) = self
-                    .iam_client
-                    .list_role_policies()
-                    .role_name(&role_name)
-                    .send()
-                    .await
-                {
-                    for policy_name in inline_policies.policy_names().iter() {
-                        attachments.push(json!({
-                            "entity_type": "role",
-                            "entity_name": role_name.clone(),
+        // RoleとPolicyの接続
+        let mut role_policies = Vec::new();
+        if let Ok(roles_info) = self.iam_client.list_roles().await {
+            for role in roles_info {
+                if !self.apply_name_prefix_filter(&role.role_name) {
+                    continue;
+                }
+
+                // インラインポリシーを取得
+                if let Ok(inline_policies) = self.iam_client.list_role_policies(&role.role_name).await {
+                    for policy_name in inline_policies {
+                        role_policies.push(json!({
+                            "role_name": role.role_name,
                             "policy_name": policy_name,
                             "policy_type": "inline",
                         }));
                     }
                 }
+
+                // アタッチされたマネージドポリシーを取得
+                if let Ok(attached_policies) = self.iam_client.list_attached_role_policies(&role.role_name).await {
+                    for policy in attached_policies {
+                        role_policies.push(json!({
+                            "role_name": role.role_name,
+                            "policy_arn": policy.policy_arn,
+                            "policy_type": "managed",
+                        }));
+                    }
+                }
             }
         }
+        attachments.insert("role_policies".to_string(), Value::Array(role_policies));
 
-        Ok(attachments)
+        // UserとGroupの接続
+        let mut user_groups = Vec::new();
+        if let Ok(users_info) = self.iam_client.list_users().await {
+            for user in users_info {
+                if !self.apply_name_prefix_filter(&user.user_name) {
+                    continue;
+                }
+
+                if let Ok(groups) = self.iam_client.list_groups_for_user(&user.user_name).await {
+                    for group_name in groups {
+                        user_groups.push(json!({
+                            "user_name": user.user_name,
+                            "group_name": group_name,
+                        }));
+                    }
+                }
+            }
+        }
+        attachments.insert("user_groups".to_string(), Value::Array(user_groups));
+
+        Ok(Value::Object(attachments))
     }
 
-    async fn scan_cleanup(&self) -> Result<Vec<Value>> {
-        let mut cleanup_items = Vec::new();
-
-        // ユーザーのアクセスキー、ログインプロファイル、MFAデバイスを取得
-        let mut users_paginator = self
-            .iam_client
-            .list_users()
-            .into_paginator()
-            .page_size(100)
-            .send();
-        while let Some(users_page_result) = users_paginator.next().await {
-            let users_page = users_page_result.map_err(|e| {
-                anyhow!(
-                    "Failed to list users for cleanup. Error: {}. Profile: {:?}.",
-                    e,
-                    self.config.profile
-                )
-            })?;
-            for user in users_page.users().iter() {
-                let user_name = user.user_name().to_string();
-
-                // アクセスキー
-                if let Ok(access_keys) = self
-                    .iam_client
-                    .list_access_keys()
-                    .user_name(&user_name)
-                    .send()
-                    .await
-                {
-                    for key in access_keys.access_key_metadata().iter() {
-                        let create_date = key.create_date().map(|d| d.secs()).unwrap_or(0);
-                        cleanup_items.push(json!({
-                            "resource_type": "access_key",
-                            "user_name": user_name.clone(),
-                            "access_key_id": key.access_key_id().unwrap_or("").to_string(),
-                            "status": key.status().map(|s| format!("{:?}", s)).unwrap_or_default(),
-                            "create_date": create_date,
-                        }));
-                    }
-                }
-
-                // ログインプロファイル
-                if let Ok(login_profile) = self
-                    .iam_client
-                    .get_login_profile()
-                    .user_name(&user_name)
-                    .send()
-                    .await
-                {
-                    if let Some(profile) = login_profile.login_profile() {
-                        let create_date = profile.create_date().secs();
-                        cleanup_items.push(json!({
-                            "resource_type": "login_profile",
-                            "user_name": user_name.clone(),
-                            "create_date": create_date,
-                        }));
-                    }
-                }
-
-                // MFAデバイス
-                if let Ok(mfa_devices) = self
-                    .iam_client
-                    .list_mfa_devices()
-                    .user_name(&user_name)
-                    .send()
-                    .await
-                {
-                    for device in mfa_devices.mfa_devices().iter() {
-                        let enable_date = device.enable_date().secs();
-                        cleanup_items.push(json!({
-                            "resource_type": "mfa_device",
-                            "user_name": user_name.clone(),
-                            "serial_number": device.serial_number().to_string(),
-                            "enable_date": enable_date,
-                        }));
+    /// クリーンアップ処理（ポリシードキュメントを補完）
+    async fn scan_cleanup(&self, results: &mut serde_json::Map<String, Value>) -> Result<()> {
+        // Policiesにポリシードキュメントを追加
+        if let Some(Value::Array(policies)) = results.get_mut("policies") {
+            for policy in policies.iter_mut() {
+                if let Some(policy_arn) = policy.get("arn").and_then(|v| v.as_str()) {
+                    if let Some(default_version_id) = policy
+                        .get("default_version_id")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                    {
+                        if let Ok(Some(policy_doc)) = self
+                            .iam_client
+                            .get_policy_version(policy_arn, default_version_id)
+                            .await
+                        {
+                            // URLデコードしてJSONパース
+                            if let Ok(decoded) = urlencoding::decode(&policy_doc.document) {
+                                if let Ok(parsed_doc) =
+                                    serde_json::from_str::<IamPolicyDocument>(&decoded)
+                                {
+                                    policy
+                                        .as_object_mut()
+                                        .unwrap()
+                                        .insert("policy_document".to_string(), json!(parsed_doc));
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        Ok(cleanup_items)
+        Ok(())
     }
 
-    /// Assume Role Policy DocumentをパースしてTerraform用の構造化データに変換
-    fn parse_assume_role_policy(policy_doc: &str) -> Vec<Value> {
+    /// AssumeRoleポリシーをパース
+    pub fn parse_assume_role_policy(policy_doc: &str) -> Vec<Value> {
         if policy_doc.is_empty() {
             return Vec::new();
         }
@@ -866,15 +539,10 @@ impl AwsIamScanner {
                             };
                             ("Federated".to_string(), identifiers)
                         } else {
-                            // その他のPrincipal
-                            ("AWS".to_string(), vec!["*".to_string()])
+                            ("Unknown".to_string(), vec![])
                         }
                     }
-                    Some(Value::String(s)) if s == "*" => {
-                        // Principalが"*"の形式
-                        ("AWS".to_string(), vec!["*".to_string()])
-                    }
-                    _ => return None,
+                    _ => ("Unknown".to_string(), vec![]),
                 };
 
                 // Actionの処理
@@ -884,27 +552,19 @@ impl AwsIamScanner {
                         .iter()
                         .filter_map(|v| v.as_str().map(|s| s.to_string()))
                         .collect(),
-                    _ => vec!["sts:AssumeRole".to_string()], // デフォルト
+                    _ => vec![],
                 };
 
                 // Conditionの処理
-                let conditions = if let Some(Value::Object(condition_obj)) = stmt.get("Condition") {
+                let conditions = if let Some(Value::Object(cond_obj)) = stmt.get("Condition") {
                     let mut conds = Vec::new();
-                    for (test, value_obj) in condition_obj.iter() {
-                        if let Value::Object(var_obj) = value_obj {
-                            for (variable, values) in var_obj.iter() {
-                                let value_list = match values {
-                                    Value::String(s) => vec![s.clone()],
-                                    Value::Array(arr) => arr
-                                        .iter()
-                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                        .collect(),
-                                    _ => vec![],
-                                };
+                    for (operator, value) in cond_obj {
+                        if let Value::Object(inner_obj) = value {
+                            for (key, val) in inner_obj {
                                 conds.push(json!({
-                                    "test": test,
-                                    "variable": variable,
-                                    "values": value_list,
+                                    "operator": operator,
+                                    "key": key,
+                                    "value": val,
                                 }));
                             }
                         }
@@ -923,5 +583,482 @@ impl AwsIamScanner {
                 }))
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infra::aws::iam_client_trait::mock::MockIamClient;
+    use crate::infra::aws::iam_client_trait::{IamGroupInfo, IamPolicyInfo, IamRoleInfo, IamUserInfo, PolicyAttachment};
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    fn create_test_config(filters: HashMap<String, String>, scan_targets: HashMap<String, bool>) -> ScanConfig {
+        ScanConfig {
+            provider: "aws".to_string(),
+            account_id: None,
+            profile: None,
+            assume_role_arn: None,
+            assume_role_session_name: None,
+            subscription_id: None,
+            tenant_id: None,
+            auth_method: None,
+            service_principal_config: None,
+            scope_type: None,
+            scope_value: None,
+            scan_targets,
+            filters,
+        }
+    }
+
+    // ========================================
+    // parse_assume_role_policy のテスト
+    // ========================================
+
+    #[test]
+    fn test_parse_assume_role_policy_empty() {
+        let result = AwsIamScanner::<MockIamClient>::parse_assume_role_policy("");
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_assume_role_policy_service_principal() {
+        let policy = r#"{
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "lambda.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        }"#;
+
+        let result = AwsIamScanner::<MockIamClient>::parse_assume_role_policy(policy);
+        assert_eq!(result.len(), 1);
+
+        let stmt = &result[0];
+        assert_eq!(stmt["effect"], "Allow");
+        assert_eq!(stmt["principal_type"], "Service");
+        assert_eq!(stmt["principal_identifiers"], json!(["lambda.amazonaws.com"]));
+        assert_eq!(stmt["actions"], json!(["sts:AssumeRole"]));
+    }
+
+    #[test]
+    fn test_parse_assume_role_policy_aws_principal() {
+        let policy = r#"{
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "AWS": "arn:aws:iam::123456789012:root"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        }"#;
+
+        let result = AwsIamScanner::<MockIamClient>::parse_assume_role_policy(policy);
+        assert_eq!(result.len(), 1);
+
+        let stmt = &result[0];
+        assert_eq!(stmt["effect"], "Allow");
+        assert_eq!(stmt["principal_type"], "AWS");
+        assert_eq!(
+            stmt["principal_identifiers"],
+            json!(["arn:aws:iam::123456789012:root"])
+        );
+    }
+
+    #[test]
+    fn test_parse_assume_role_policy_with_condition() {
+        let policy = r#"{
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "ec2.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole",
+                    "Condition": {
+                        "StringEquals": {
+                            "sts:ExternalId": "unique-external-id"
+                        }
+                    }
+                }
+            ]
+        }"#;
+
+        let result = AwsIamScanner::<MockIamClient>::parse_assume_role_policy(policy);
+        assert_eq!(result.len(), 1);
+
+        let stmt = &result[0];
+        assert_eq!(stmt["effect"], "Allow");
+        assert_eq!(stmt["conditions"].as_array().unwrap().len(), 1);
+
+        let condition = &stmt["conditions"][0];
+        assert_eq!(condition["operator"], "StringEquals");
+        assert_eq!(condition["key"], "sts:ExternalId");
+        assert_eq!(condition["value"], "unique-external-id");
+    }
+
+    #[test]
+    fn test_parse_assume_role_policy_url_encoded() {
+        let encoded_policy = "%7B%22Version%22%3A%222012-10-17%22%2C%22Statement%22%3A%5B%7B%22Effect%22%3A%22Allow%22%2C%22Principal%22%3A%7B%22Service%22%3A%22lambda.amazonaws.com%22%7D%2C%22Action%22%3A%22sts%3AAssumeRole%22%7D%5D%7D";
+
+        let result = AwsIamScanner::<MockIamClient>::parse_assume_role_policy(encoded_policy);
+        assert_eq!(result.len(), 1);
+
+        let stmt = &result[0];
+        assert_eq!(stmt["effect"], "Allow");
+        assert_eq!(stmt["principal_type"], "Service");
+        assert_eq!(stmt["principal_identifiers"], json!(["lambda.amazonaws.com"]));
+    }
+
+    #[test]
+    fn test_parse_assume_role_policy_multiple_principals() {
+        let policy = r#"{
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": ["ec2.amazonaws.com", "lambda.amazonaws.com"]
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        }"#;
+
+        let result = AwsIamScanner::<MockIamClient>::parse_assume_role_policy(policy);
+        assert_eq!(result.len(), 1);
+
+        let stmt = &result[0];
+        assert_eq!(
+            stmt["principal_identifiers"],
+            json!(["ec2.amazonaws.com", "lambda.amazonaws.com"])
+        );
+    }
+
+    #[test]
+    fn test_parse_assume_role_policy_invalid_json() {
+        let invalid_json = "not a valid json";
+        let result = AwsIamScanner::<MockIamClient>::parse_assume_role_policy(invalid_json);
+        assert_eq!(result.len(), 0);
+    }
+
+    // ========================================
+    // apply_name_prefix_filter のテスト
+    // ========================================
+
+    #[test]
+    fn test_apply_name_prefix_filter_with_prefix() {
+        let mut filters = HashMap::new();
+        filters.insert("name_prefix".to_string(), "test-".to_string());
+
+        let mut mock_client = MockIamClient::new();
+        mock_client.expect_list_users().returning(|| Ok(vec![]));
+
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(filters, HashMap::new()),
+            mock_client,
+        );
+
+        // プレフィックスにマッチする場合
+        assert!(scanner.apply_name_prefix_filter("test-user"));
+        assert!(scanner.apply_name_prefix_filter("test-role-123"));
+
+        // プレフィックスにマッチしない場合
+        assert!(!scanner.apply_name_prefix_filter("prod-user"));
+        assert!(!scanner.apply_name_prefix_filter("user"));
+    }
+
+    #[test]
+    fn test_apply_name_prefix_filter_without_prefix() {
+        let mock_client = MockIamClient::new();
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(HashMap::new(), HashMap::new()),
+            mock_client,
+        );
+
+        // フィルタがない場合は全て通す
+        assert!(scanner.apply_name_prefix_filter("any-name"));
+        assert!(scanner.apply_name_prefix_filter("test-user"));
+        assert!(scanner.apply_name_prefix_filter("prod-role"));
+    }
+
+    // ========================================
+    // scan_users のモックテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_scan_users_returns_filtered_users() {
+        let mut mock_client = MockIamClient::new();
+
+        mock_client.expect_list_users().returning(|| {
+            Ok(vec![
+                IamUserInfo {
+                    user_name: "test-user-1".to_string(),
+                    user_id: "AIDA1234567890".to_string(),
+                    arn: "arn:aws:iam::123456789012:user/test-user-1".to_string(),
+                    create_date: 1609459200,
+                    path: "/".to_string(),
+                    tags: HashMap::new(),
+                },
+                IamUserInfo {
+                    user_name: "prod-user".to_string(),
+                    user_id: "AIDA0987654321".to_string(),
+                    arn: "arn:aws:iam::123456789012:user/prod-user".to_string(),
+                    create_date: 1609459200,
+                    path: "/".to_string(),
+                    tags: HashMap::new(),
+                },
+                IamUserInfo {
+                    user_name: "test-user-2".to_string(),
+                    user_id: "AIDA1111111111".to_string(),
+                    arn: "arn:aws:iam::123456789012:user/test-user-2".to_string(),
+                    create_date: 1609459200,
+                    path: "/developers/".to_string(),
+                    tags: {
+                        let mut tags = HashMap::new();
+                        tags.insert("Environment".to_string(), "test".to_string());
+                        tags
+                    },
+                },
+            ])
+        });
+
+        let mut filters = HashMap::new();
+        filters.insert("name_prefix".to_string(), "test-".to_string());
+
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(filters, HashMap::new()),
+            mock_client,
+        );
+
+        let users = scanner.scan_users().await.unwrap();
+
+        // test-で始まるユーザーのみが返される
+        assert_eq!(users.len(), 2);
+        assert_eq!(users[0]["user_name"], "test-user-1");
+        assert_eq!(users[1]["user_name"], "test-user-2");
+        assert_eq!(users[1]["path"], "/developers/");
+        assert!(users[1]["tags"].is_object());
+    }
+
+    // ========================================
+    // scan_groups のモックテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_scan_groups_returns_all_groups() {
+        let mut mock_client = MockIamClient::new();
+
+        mock_client.expect_list_groups().returning(|| {
+            Ok(vec![
+                IamGroupInfo {
+                    group_name: "developers".to_string(),
+                    group_id: "AGPA1234567890".to_string(),
+                    arn: "arn:aws:iam::123456789012:group/developers".to_string(),
+                    create_date: 1609459200,
+                    path: "/".to_string(),
+                },
+                IamGroupInfo {
+                    group_name: "admins".to_string(),
+                    group_id: "AGPA0987654321".to_string(),
+                    arn: "arn:aws:iam::123456789012:group/admins".to_string(),
+                    create_date: 1609459200,
+                    path: "/admin/".to_string(),
+                },
+            ])
+        });
+
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(HashMap::new(), HashMap::new()),
+            mock_client,
+        );
+
+        let groups = scanner.scan_groups().await.unwrap();
+
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0]["group_name"], "developers");
+        assert_eq!(groups[1]["group_name"], "admins");
+    }
+
+    // ========================================
+    // scan_roles のモックテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_scan_roles_with_assume_role_policy() {
+        let mut mock_client = MockIamClient::new();
+
+        mock_client.expect_list_roles().returning(|| {
+            Ok(vec![
+                IamRoleInfo {
+                    role_name: "lambda-execution-role".to_string(),
+                    role_id: "AROA1234567890".to_string(),
+                    arn: "arn:aws:iam::123456789012:role/lambda-execution-role".to_string(),
+                    create_date: 1609459200,
+                    path: "/service-role/".to_string(),
+                    assume_role_policy_document: Some(r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}"#.to_string()),
+                    tags: HashMap::new(),
+                },
+            ])
+        });
+
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(HashMap::new(), HashMap::new()),
+            mock_client,
+        );
+
+        let roles = scanner.scan_roles().await.unwrap();
+
+        assert_eq!(roles.len(), 1);
+        assert_eq!(roles[0]["role_name"], "lambda-execution-role");
+
+        let assume_role_statements = roles[0]["assume_role_statements"].as_array().unwrap();
+        assert_eq!(assume_role_statements.len(), 1);
+        assert_eq!(assume_role_statements[0]["principal_type"], "Service");
+    }
+
+    // ========================================
+    // scan_policies のモックテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_scan_policies_returns_local_policies() {
+        let mut mock_client = MockIamClient::new();
+
+        mock_client.expect_list_policies().returning(|| {
+            Ok(vec![
+                IamPolicyInfo {
+                    policy_name: "CustomS3Policy".to_string(),
+                    policy_id: "ANPA1234567890".to_string(),
+                    arn: "arn:aws:iam::123456789012:policy/CustomS3Policy".to_string(),
+                    path: "/".to_string(),
+                    default_version_id: "v1".to_string(),
+                    attachment_count: 2,
+                    create_date: 1609459200,
+                    update_date: 1609459200,
+                    description: "Custom S3 access policy".to_string(),
+                },
+            ])
+        });
+
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(HashMap::new(), HashMap::new()),
+            mock_client,
+        );
+
+        let policies = scanner.scan_policies().await.unwrap();
+
+        assert_eq!(policies.len(), 1);
+        assert_eq!(policies[0]["policy_name"], "CustomS3Policy");
+        assert_eq!(policies[0]["attachment_count"], 2);
+    }
+
+    // ========================================
+    // 進捗コールバックのテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_scan_progress_callback() {
+        let mut mock_client = MockIamClient::new();
+
+        // 全ての必要なメソッドにモック設定
+        mock_client.expect_list_users().returning(|| Ok(vec![
+            IamUserInfo {
+                user_name: "user1".to_string(),
+                user_id: "id1".to_string(),
+                arn: "arn1".to_string(),
+                create_date: 0,
+                path: "/".to_string(),
+                tags: HashMap::new(),
+            },
+        ]));
+        mock_client.expect_list_groups().returning(|| Ok(vec![]));
+        mock_client.expect_list_roles().returning(|| Ok(vec![]));
+        mock_client.expect_list_policies().returning(|| Ok(vec![]));
+        mock_client.expect_list_user_policies().returning(|_| Ok(vec![]));
+        mock_client.expect_list_attached_user_policies().returning(|_| Ok(vec![]));
+        mock_client.expect_list_groups_for_user().returning(|_| Ok(vec![]));
+
+        let mut scan_targets = HashMap::new();
+        scan_targets.insert("users".to_string(), true);
+
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(HashMap::new(), scan_targets),
+            mock_client,
+        );
+
+        let progress_values = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let progress_clone = progress_values.clone();
+
+        let callback: Box<dyn Fn(u32, String) + Send + Sync> = Box::new(move |progress, message| {
+            progress_clone.lock().unwrap().push((progress, message));
+        });
+
+        let result = scanner.scan(callback).await.unwrap();
+
+        // 結果の検証
+        assert_eq!(result["provider"], "aws");
+        assert_eq!(result["users"].as_array().unwrap().len(), 1);
+
+        // 進捗コールバックの検証
+        let values = progress_values.lock().unwrap();
+        assert!(values.len() >= 2); // 開始と完了のコールバック
+        assert_eq!(values.last().unwrap().0, 100); // 最後は100%
+    }
+
+    // ========================================
+    // エラーハンドリングのテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_scan_users_error_handling() {
+        let mut mock_client = MockIamClient::new();
+
+        mock_client.expect_list_users().returning(|| {
+            Err(anyhow::anyhow!("Authentication failed: invalid credentials"))
+        });
+
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(HashMap::new(), HashMap::new()),
+            mock_client,
+        );
+
+        let result = scanner.scan_users().await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Authentication failed"));
+    }
+
+    #[tokio::test]
+    async fn test_scan_with_permission_denied() {
+        let mut mock_client = MockIamClient::new();
+
+        mock_client.expect_list_users().returning(|| {
+            Err(anyhow::anyhow!("Access Denied: iam:ListUsers permission required"))
+        });
+
+        let mut scan_targets = HashMap::new();
+        scan_targets.insert("users".to_string(), true);
+
+        let scanner = AwsIamScanner::new_with_client(
+            create_test_config(HashMap::new(), scan_targets),
+            mock_client,
+        );
+
+        let callback: Box<dyn Fn(u32, String) + Send + Sync> = Box::new(|_, _| {});
+        let result = scanner.scan(callback).await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Access Denied"));
     }
 }

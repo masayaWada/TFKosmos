@@ -316,3 +316,453 @@ impl GenerationService {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::ScanConfig;
+    use crate::services::scan_service::ScanService;
+    use serde_json::json;
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    // テストデータの作成ヘルパー
+    fn create_test_scan_data() -> Value {
+        json!({
+            "provider": "aws",
+            "users": [
+                {
+                    "user_name": "test-user",
+                    "arn": "arn:aws:iam::123456789012:user/test-user",
+                    "user_id": "AIDAEXAMPLE",
+                    "create_date": "2023-01-01T00:00:00Z"
+                }
+            ],
+            "groups": [
+                {
+                    "group_name": "test-group",
+                    "arn": "arn:aws:iam::123456789012:group/test-group",
+                    "group_id": "AGPAEXAMPLE",
+                    "create_date": "2023-01-01T00:00:00Z"
+                }
+            ],
+            "roles": [
+                {
+                    "role_name": "test-role",
+                    "arn": "arn:aws:iam::123456789012:role/test-role",
+                    "role_id": "AROAEXAMPLE",
+                    "create_date": "2023-01-01T00:00:00Z",
+                    "assume_role_policy_document": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+                }
+            ],
+            "policies": [
+                {
+                    "policy_name": "test-policy",
+                    "arn": "arn:aws:iam::123456789012:policy/test-policy",
+                    "policy_id": "ANPAEXAMPLE",
+                    "description": "Test policy",
+                    "create_date": "2023-01-01T00:00:00Z",
+                    "policy_document": {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Sid": "TestStatement",
+                                "Effect": "Allow",
+                                "Action": ["s3:GetObject"],
+                                "Resource": ["arn:aws:s3:::test-bucket/*"]
+                            }
+                        ]
+                    }
+                }
+            ]
+        })
+    }
+
+    fn create_test_config(output_path: &str) -> GenerationConfig {
+        GenerationConfig {
+            output_path: output_path.to_string(),
+            file_split_rule: "single".to_string(),
+            naming_convention: "snake_case".to_string(),
+            generate_readme: true,
+            import_script_format: "sh".to_string(),
+            selected_resources: HashMap::new(),
+        }
+    }
+
+    // ========================================
+    // truncate_to_chars のテスト
+    // ========================================
+
+    #[test]
+    fn test_truncate_to_chars_short_string() {
+        let input = "Hello World";
+        let result = GenerationService::truncate_to_chars(input, 100);
+        assert_eq!(result, "Hello World");
+    }
+
+    #[test]
+    fn test_truncate_to_chars_exact_length() {
+        let input = "Hello";
+        let result = GenerationService::truncate_to_chars(input, 5);
+        assert_eq!(result, "Hello");
+    }
+
+    #[test]
+    fn test_truncate_to_chars_long_string() {
+        let input = "Hello World, this is a test string";
+        let result = GenerationService::truncate_to_chars(input, 10);
+        assert_eq!(result, "Hello Worl...");
+    }
+
+    #[test]
+    fn test_truncate_to_chars_multibyte_characters() {
+        // 日本語のマルチバイト文字のテスト
+        let input = "こんにちは世界";
+        let result = GenerationService::truncate_to_chars(input, 5);
+        // "こんにちは" の5文字 + "..."
+        assert_eq!(result, "こんにちは...");
+    }
+
+    #[test]
+    fn test_truncate_to_chars_mixed_characters() {
+        let input = "Hello世界";
+        let result = GenerationService::truncate_to_chars(input, 6);
+        assert_eq!(result, "Hello世...");
+    }
+
+    // ========================================
+    // create_zip のテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_create_zip_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().to_str().unwrap();
+
+        // テストファイルを作成
+        std::fs::write(
+            temp_dir.path().join("test.tf"),
+            "resource \"aws_iam_user\" \"test\" {}",
+        )
+        .unwrap();
+
+        let result = GenerationService::create_zip(output_path, "test-id").await;
+        assert!(result.is_ok());
+
+        let zip_data = result.unwrap();
+        assert!(!zip_data.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_create_zip_directory_not_exists() {
+        let result = GenerationService::create_zip("/nonexistent/path", "test-id").await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Output directory does not exist"));
+    }
+
+    #[tokio::test]
+    async fn test_create_zip_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().to_str().unwrap();
+
+        let result = GenerationService::create_zip(output_path, "test-id").await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No files were generated"));
+    }
+
+    #[tokio::test]
+    async fn test_create_zip_not_a_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        std::fs::write(&file_path, "test").unwrap();
+
+        let result =
+            GenerationService::create_zip(file_path.to_str().unwrap(), "test-id").await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("not a directory"));
+    }
+
+    // ========================================
+    // generate_terraform のテスト
+    // ========================================
+
+    #[tokio::test]
+    async fn test_generate_terraform_success() {
+        // テスト用のスキャンデータを準備
+        let scan_id = "test-scan-id";
+        let scan_data = create_test_scan_data();
+
+        let config = ScanConfig {
+            provider: "aws".to_string(),
+            account_id: None,
+            profile: None,
+            assume_role_arn: None,
+            assume_role_session_name: None,
+            subscription_id: None,
+            tenant_id: None,
+            auth_method: None,
+            service_principal_config: None,
+            scope_type: None,
+            scope_value: None,
+            scan_targets: HashMap::new(),
+            filters: HashMap::new(),
+        };
+
+        // スキャン結果を登録
+        ScanService::insert_test_scan_data(scan_id.to_string(), config, scan_data).await;
+
+        // 一時ディレクトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().to_str().unwrap();
+
+        let gen_config = create_test_config(output_path);
+        let selected_resources = HashMap::new(); // 全リソースを選択
+
+        // Terraform生成を実行
+        let result =
+            GenerationService::generate_terraform(scan_id, gen_config, selected_resources).await;
+
+        assert!(result.is_ok());
+
+        let response = result.unwrap();
+        assert!(!response.generation_id.is_empty());
+        assert!(!response.files.is_empty());
+        assert!(response.preview.is_some());
+
+        // 生成されたファイルが存在することを確認
+        for file in &response.files {
+            let file_path = PathBuf::from(&response.output_path).join(file);
+            assert!(
+                file_path.exists(),
+                "Generated file should exist: {:?}",
+                file_path
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_generate_terraform_scan_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().to_str().unwrap();
+
+        let gen_config = create_test_config(output_path);
+        let selected_resources = HashMap::new();
+
+        let result = GenerationService::generate_terraform(
+            "nonexistent-scan-id",
+            gen_config,
+            selected_resources,
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Scan not found"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_terraform_with_selected_resources() {
+        // テスト用のスキャンデータを準備
+        let scan_id = "test-scan-selected";
+        let scan_data = create_test_scan_data();
+
+        let config = ScanConfig {
+            provider: "aws".to_string(),
+            account_id: None,
+            profile: None,
+            assume_role_arn: None,
+            assume_role_session_name: None,
+            subscription_id: None,
+            tenant_id: None,
+            auth_method: None,
+            service_principal_config: None,
+            scope_type: None,
+            scope_value: None,
+            scan_targets: HashMap::new(),
+            filters: HashMap::new(),
+        };
+
+        ScanService::insert_test_scan_data(scan_id.to_string(), config, scan_data).await;
+
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().to_str().unwrap();
+
+        let gen_config = create_test_config(output_path);
+
+        // 特定のリソースのみを選択
+        let mut selected_resources = HashMap::new();
+        selected_resources.insert("users".to_string(), vec![json!("test-user")]);
+
+        let result =
+            GenerationService::generate_terraform(scan_id, gen_config, selected_resources).await;
+
+        assert!(result.is_ok());
+
+        let response = result.unwrap();
+        assert!(!response.files.is_empty());
+
+        // usersファイルのみが生成されることを確認
+        let users_file_exists = response.files.iter().any(|f| f.contains("users"));
+        assert!(users_file_exists, "Users file should be generated");
+    }
+
+    #[tokio::test]
+    async fn test_generate_terraform_preview_generation() {
+        let scan_id = "test-scan-preview";
+        let scan_data = create_test_scan_data();
+
+        let config = ScanConfig {
+            provider: "aws".to_string(),
+            account_id: None,
+            profile: None,
+            assume_role_arn: None,
+            assume_role_session_name: None,
+            subscription_id: None,
+            tenant_id: None,
+            auth_method: None,
+            service_principal_config: None,
+            scope_type: None,
+            scope_value: None,
+            scan_targets: HashMap::new(),
+            filters: HashMap::new(),
+        };
+
+        ScanService::insert_test_scan_data(scan_id.to_string(), config, scan_data).await;
+
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().to_str().unwrap();
+
+        let gen_config = create_test_config(output_path);
+        let selected_resources = HashMap::new();
+
+        let result =
+            GenerationService::generate_terraform(scan_id, gen_config, selected_resources).await;
+
+        assert!(result.is_ok());
+
+        let response = result.unwrap();
+        assert!(response.preview.is_some());
+
+        let preview = response.preview.unwrap();
+        assert!(!preview.is_empty());
+
+        // プレビューの内容が1000文字以内であることを確認
+        for (file_name, content) in preview {
+            assert!(
+                content.len() <= 1003,
+                "Preview for {} should be <= 1000 chars + '...'",
+                file_name
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_generate_terraform_with_readme() {
+        let scan_id = "test-scan-readme";
+        let scan_data = create_test_scan_data();
+
+        let config = ScanConfig {
+            provider: "aws".to_string(),
+            account_id: None,
+            profile: None,
+            assume_role_arn: None,
+            assume_role_session_name: None,
+            subscription_id: None,
+            tenant_id: None,
+            auth_method: None,
+            service_principal_config: None,
+            scope_type: None,
+            scope_value: None,
+            scan_targets: HashMap::new(),
+            filters: HashMap::new(),
+        };
+
+        ScanService::insert_test_scan_data(scan_id.to_string(), config, scan_data).await;
+
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().to_str().unwrap();
+
+        let mut gen_config = create_test_config(output_path);
+        gen_config.generate_readme = true;
+
+        let selected_resources = HashMap::new();
+
+        let result =
+            GenerationService::generate_terraform(scan_id, gen_config, selected_resources).await;
+
+        assert!(result.is_ok());
+
+        let response = result.unwrap();
+
+        // README.mdが生成されたことを確認
+        let readme_exists = response.files.iter().any(|f| f == "README.md");
+        assert!(readme_exists, "README.md should be generated");
+
+        // README.mdファイルが実際に存在することを確認
+        let readme_path = PathBuf::from(&response.output_path).join("README.md");
+        assert!(readme_path.exists(), "README.md file should exist");
+    }
+
+    #[tokio::test]
+    async fn test_generate_terraform_import_script_generation() {
+        let scan_id = "test-scan-import";
+        let scan_data = create_test_scan_data();
+
+        let config = ScanConfig {
+            provider: "aws".to_string(),
+            account_id: None,
+            profile: None,
+            assume_role_arn: None,
+            assume_role_session_name: None,
+            subscription_id: None,
+            tenant_id: None,
+            auth_method: None,
+            service_principal_config: None,
+            scope_type: None,
+            scope_value: None,
+            scan_targets: HashMap::new(),
+            filters: HashMap::new(),
+        };
+
+        ScanService::insert_test_scan_data(scan_id.to_string(), config, scan_data).await;
+
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().to_str().unwrap();
+
+        let gen_config = create_test_config(output_path);
+        let selected_resources = HashMap::new();
+
+        let result =
+            GenerationService::generate_terraform(scan_id, gen_config, selected_resources).await;
+
+        assert!(result.is_ok());
+
+        let response = result.unwrap();
+
+        // インポートスクリプトが生成されたことを確認
+        assert!(response.import_script_path.is_some());
+
+        let import_script_path = response.import_script_path.unwrap();
+        assert_eq!(import_script_path, "import.sh");
+
+        // インポートスクリプトファイルが実際に存在することを確認
+        let script_path = PathBuf::from(&response.output_path).join(&import_script_path);
+        assert!(script_path.exists(), "Import script should exist");
+
+        // スクリプトの内容を確認
+        let script_content = std::fs::read_to_string(script_path).unwrap();
+        assert!(script_content.contains("#!/bin/bash"));
+        assert!(script_content.contains("terraform import"));
+    }
+}

@@ -1,28 +1,41 @@
 use anyhow::{Context, Result};
-use azure_core::credentials::TokenCredential;
-use azure_identity::AzureCliCredential;
 use futures::future::join_all;
-use reqwest::Client as HttpClient;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::process::Command;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
 
+use super::azure_client_trait::AzureClientOps;
+use super::real_azure_client::RealAzureClient;
 use crate::models::ScanConfig;
 
-pub struct AzureIamScanner {
+pub struct AzureIamScanner<C: AzureClientOps> {
     config: ScanConfig,
+    client: Arc<C>,
 }
 
-impl AzureIamScanner {
+impl AzureIamScanner<RealAzureClient> {
     pub async fn new(config: ScanConfig) -> Result<Self> {
-        Ok(Self { config })
+        Ok(Self {
+            config,
+            client: Arc::new(RealAzureClient::new()),
+        })
+    }
+}
+
+impl<C: AzureClientOps> AzureIamScanner<C> {
+    /// テスト用: モッククライアントを使用してスキャナーを作成
+    #[cfg(test)]
+    pub fn new_with_client(config: ScanConfig, client: C) -> Self {
+        Self {
+            config,
+            client: Arc::new(client),
+        }
     }
 
     /// Role Definitionをフロントエンド形式に変換（表示名なし）
-    fn transform_role_definition_basic(rd: &Value) -> Value {
+    pub fn transform_role_definition_basic(rd: &Value) -> Value {
         let mut transformed = serde_json::Map::new();
         if let Some(id) = rd.get("id") {
             transformed.insert("role_definition_id".to_string(), id.clone());
@@ -54,28 +67,6 @@ impl AzureIamScanner {
             }
         }
         Value::Object(transformed)
-    }
-
-    /// Azure CLIコマンドを実行してJSONを取得
-    async fn execute_az_command(args: &[&str]) -> Result<Value> {
-        let output = Command::new("az")
-            .args(args)
-            .output()
-            .await
-            .context("Azure CLIがインストールされていないか、PATHに含まれていません")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Azure CLIコマンドが失敗しました: {}", stderr);
-        }
-
-        let stdout = String::from_utf8(output.stdout)
-            .context("Azure CLIの出力をUTF-8として解析できませんでした")?;
-
-        let json: Value = serde_json::from_str(&stdout)
-            .context("Azure CLIの出力をJSONとして解析できませんでした")?;
-
-        Ok(json)
     }
 
     /// スコープに基づいてAzure CLIコマンドの引数を構築
@@ -133,7 +124,7 @@ impl AzureIamScanner {
     }
 
     /// Role Definitionsを取得
-    async fn scan_role_definitions(&self) -> Result<Vec<Value>> {
+    pub async fn scan_role_definitions(&self) -> Result<Vec<Value>> {
         let scan_targets = &self.config.scan_targets;
 
         if !scan_targets
@@ -159,12 +150,9 @@ impl AzureIamScanner {
         // スコープ引数を追加
         args.extend(scope_args);
 
-        // &strのスライスに変換
-        let full_args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-
         let az_start = std::time::Instant::now();
         debug!("Azure CLIコマンド実行開始: az role definition list");
-        let json = Self::execute_az_command(&full_args).await?;
+        let json = self.client.execute_az_command(args.clone()).await?;
         debug!(elapsed_ms = az_start.elapsed().as_millis(), "Azure CLIコマンド完了");
 
         // まず、すべてのrole definitionを収集
@@ -213,14 +201,15 @@ impl AzureIamScanner {
         // トークンを事前に取得してキャッシュ
         let token_start = std::time::Instant::now();
         let scope = "https://management.azure.com/.default";
-        let token = match Self::get_auth_token(scope).await {
+        let token = match self.client.get_auth_token(scope).await {
             Some(token) => {
                 debug!(elapsed_ms = token_start.elapsed().as_millis(), "トークン取得完了");
                 token
             }
             None => {
                 warn!("トークン取得失敗、フォールバック処理に移行");
-                let role_definitions: Vec<Value> = role_definitions_vec.iter()
+                let role_definitions: Vec<Value> = role_definitions_vec
+                    .iter()
                     .map(Self::transform_role_definition_basic)
                     .collect();
                 info!(count = role_definitions.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Definitionsスキャン完了");
@@ -228,39 +217,38 @@ impl AzureIamScanner {
             }
         };
 
-        // HTTPクライアントを再利用
-        let http_client = match HttpClient::builder().build() {
-            Ok(client) => client,
-            Err(_) => {
-                warn!("HTTPクライアント作成失敗、フォールバック処理に移行");
-                let role_definitions: Vec<Value> = role_definitions_vec.iter()
-                    .map(Self::transform_role_definition_basic)
-                    .collect();
-                info!(count = role_definitions.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Definitionsスキャン完了");
-                return Ok(role_definitions);
-            }
-        };
+        // HTTPクライアントが利用できない場合はフォールバック
+        if self.client.get_http_client().is_none() {
+            warn!("HTTPクライアント利用不可、フォールバック処理に移行");
+            let role_definitions: Vec<Value> = role_definitions_vec
+                .iter()
+                .map(Self::transform_role_definition_basic)
+                .collect();
+            info!(count = role_definitions.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Definitionsスキャン完了");
+            return Ok(role_definitions);
+        }
 
         // 同時実行数を10に制限
         let semaphore = Arc::new(Semaphore::new(10));
         let sub_id = self.config.subscription_id.as_deref();
+        let client = Arc::clone(&self.client);
         let display_name_futures: Vec<_> = unique_role_def_ids
             .iter()
             .map(|rid| {
                 let rid_clone = rid.clone();
                 let sub_id_clone = sub_id.map(|s| s.to_string());
                 let token_clone = token.clone();
-                let client_clone = http_client.clone();
                 let permit = semaphore.clone();
+                let client = Arc::clone(&client);
                 async move {
                     let _permit = permit.acquire().await.unwrap();
-                    let name = Self::get_role_display_name_with_token(
-                        &rid_clone,
-                        sub_id_clone.as_deref(),
-                        &token_clone,
-                        &client_clone,
-                    )
-                    .await;
+                    let name = client
+                        .get_role_display_name(
+                            &rid_clone,
+                            sub_id_clone,
+                            &token_clone,
+                        )
+                        .await;
                     (rid_clone, name)
                 }
             })
@@ -362,146 +350,8 @@ impl AzureIamScanner {
         Ok(role_definitions)
     }
 
-    /// 認証トークンを取得（再利用可能にするため）
-    async fn get_auth_token(scope: &str) -> Option<String> {
-        let credential = match AzureCliCredential::new(None) {
-            Ok(cred) => cred,
-            Err(_) => return None,
-        };
-
-        let scopes = &[scope];
-        let token_response = match credential.get_token(scopes, None).await {
-            Ok(token) => token,
-            Err(_) => return None,
-        };
-        Some(token_response.token.secret().to_string())
-    }
-
-    /// Principal IDから表示名を取得（Microsoft Graph APIを使用、トークンとHTTPクライアントを再利用）
-    async fn get_principal_display_name_with_token(
-        principal_id: &str,
-        principal_type: Option<&str>,
-        token: &str,
-        client: &HttpClient,
-    ) -> Option<String> {
-        // Microsoft Graph APIのエンドポイントを決定
-        let endpoint = match principal_type {
-            Some("User") => format!("https://graph.microsoft.com/v1.0/users/{}", principal_id),
-            Some("ServicePrincipal") => format!(
-                "https://graph.microsoft.com/v1.0/servicePrincipals/{}",
-                principal_id
-            ),
-            _ => return None,
-        };
-
-        // APIリクエストを送信
-        let response = match client
-            .get(&endpoint)
-            .header("Authorization", format!("Bearer {}", token))
-            .send()
-            .await
-        {
-            Ok(resp) => resp,
-            Err(_) => return None,
-        };
-
-        // レスポンスをJSONとして解析
-        let json: Value = match response.json().await {
-            Ok(json) => json,
-            Err(_) => return None,
-        };
-
-        // 表示名を取得
-        if let Some(display_name) = json.get("displayName") {
-            display_name.as_str().map(|s| s.to_string())
-        } else if let Some(app_display_name) = json.get("appDisplayName") {
-            app_display_name.as_str().map(|s| s.to_string())
-        } else {
-            None
-        }
-    }
-
-    /// Role Definition IDから表示名を取得（Azure Management APIを使用、トークンとHTTPクライアントを再利用）
-    async fn get_role_display_name_with_token(
-        role_definition_id: &str,
-        subscription_id: Option<&str>,
-        token: &str,
-        client: &HttpClient,
-    ) -> Option<String> {
-        // roleDefinitionIdの形式: /subscriptions/{subId}/providers/Microsoft.Authorization/roleDefinitions/{roleId}
-        // または単にroleIdのみの場合もある
-
-        let (sub_id, role_id) = if role_definition_id.starts_with("/subscriptions/") {
-            // フルパスの場合
-            if let Some(role_id_start) = role_definition_id.rfind('/') {
-                let role_id = &role_definition_id[role_id_start + 1..];
-                let sub_id_start =
-                    role_definition_id.find("/subscriptions/").unwrap() + "/subscriptions/".len();
-                let sub_id_end = role_definition_id[sub_id_start..]
-                    .find('/')
-                    .unwrap_or(role_definition_id.len() - sub_id_start);
-                let sub_id = &role_definition_id[sub_id_start..sub_id_start + sub_id_end];
-                (Some(sub_id), role_id)
-            } else {
-                return None;
-            }
-        } else {
-            // roleIdのみの場合
-            (subscription_id, role_definition_id)
-        };
-
-        let sub_id = match sub_id {
-            Some(id) => id,
-            None => return None,
-        };
-
-        // Azure Management APIのエンドポイント
-        let endpoint = format!(
-            "https://management.azure.com/subscriptions/{}/providers/Microsoft.Authorization/roleDefinitions/{}?api-version=2022-04-01",
-            sub_id, role_id
-        );
-
-        // APIリクエストを送信（日本語ロケールを指定）
-        let response = match client
-            .get(&endpoint)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Accept-Language", "ja-JP")
-            .send()
-            .await
-        {
-            Ok(resp) => resp,
-            Err(_) => return None,
-        };
-
-        // レスポンスをJSONとして解析
-        let json: Value = match response.json().await {
-            Ok(json) => json,
-            Err(_) => return None,
-        };
-
-        // 表示名を取得（properties.displayNameが存在する場合はそれを使用、存在しない場合はproperties.roleNameを使用）
-        let properties = json.get("properties");
-        if let Some(props) = properties {
-            // displayNameが存在する場合はそれを使用（ローカライズされた名前、日本語）
-            if let Some(display_name_localized) = props.get("displayName") {
-                if let Some(name) = display_name_localized.as_str() {
-                    if !name.is_empty() {
-                        return Some(name.to_string());
-                    }
-                }
-            }
-            // displayNameが存在しない、または空の場合はroleNameを使用（英語名）
-            if let Some(role_name) = props.get("roleName") {
-                if let Some(name) = role_name.as_str() {
-                    return Some(name.to_string());
-                }
-            }
-        }
-        None
-    }
-
     /// Role Assignmentsを取得
-    async fn scan_role_assignments(&self) -> Result<Vec<Value>> {
+    pub async fn scan_role_assignments(&self) -> Result<Vec<Value>> {
         let scan_targets = &self.config.scan_targets;
 
         if !scan_targets
@@ -527,12 +377,9 @@ impl AzureIamScanner {
         // スコープ引数を追加
         args.extend(scope_args);
 
-        // &strのスライスに変換
-        let full_args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-
         let az_start = std::time::Instant::now();
         debug!("Azure CLIコマンド実行開始: az role assignment list");
-        let json = Self::execute_az_command(&full_args).await?;
+        let json = self.client.execute_az_command(args.clone()).await?;
         debug!(elapsed_ms = az_start.elapsed().as_millis(), "Azure CLIコマンド完了");
 
         // まず、すべてのrole assignmentを収集
@@ -607,7 +454,7 @@ impl AzureIamScanner {
         // トークンを事前に取得してキャッシュ（Management API用）
         let mgmt_token_start = std::time::Instant::now();
         let mgmt_scope = "https://management.azure.com/.default";
-        let mgmt_token = match Self::get_auth_token(mgmt_scope).await {
+        let mgmt_token = match self.client.get_auth_token(mgmt_scope).await {
             Some(token) => {
                 debug!(elapsed_ms = mgmt_token_start.elapsed().as_millis(), "Management APIトークン取得完了");
                 token
@@ -621,7 +468,7 @@ impl AzureIamScanner {
         // トークンを事前に取得してキャッシュ（Graph API用）
         let graph_token_start = std::time::Instant::now();
         let graph_scope = "https://graph.microsoft.com/.default";
-        let graph_token = match Self::get_auth_token(graph_scope).await {
+        let graph_token = match self.client.get_auth_token(graph_scope).await {
             Some(token) => {
                 debug!(elapsed_ms = graph_token_start.elapsed().as_millis(), "Graph APIトークン取得完了");
                 token
@@ -632,18 +479,16 @@ impl AzureIamScanner {
             }
         };
 
-        // HTTPクライアントを再利用
-        let http_client = match HttpClient::builder().build() {
-            Ok(client) => client,
-            Err(_) => {
-                warn!("HTTPクライアント作成失敗");
-                return Ok(Vec::new());
-            }
-        };
+        // HTTPクライアントが利用できない場合は空の結果を返す
+        if self.client.get_http_client().is_none() {
+            warn!("HTTPクライアント利用不可");
+            return Ok(Vec::new());
+        }
 
         // 同時実行数を10に制限
         let semaphore = Arc::new(Semaphore::new(10));
         let sub_id = self.config.subscription_id.as_deref();
+        let client = Arc::clone(&self.client);
 
         // Role definition名を並列取得
         let role_def_futures: Vec<_> = unique_role_def_ids
@@ -652,17 +497,17 @@ impl AzureIamScanner {
                 let rid_clone = rid.clone();
                 let sub_id_clone = sub_id.map(|s| s.to_string());
                 let token_clone = mgmt_token.clone();
-                let client_clone = http_client.clone();
                 let permit = semaphore.clone();
+                let client = Arc::clone(&client);
                 async move {
                     let _permit = permit.acquire().await.unwrap();
-                    let name = Self::get_role_display_name_with_token(
-                        &rid_clone,
-                        sub_id_clone.as_deref(),
-                        &token_clone,
-                        &client_clone,
-                    )
-                    .await;
+                    let name = client
+                        .get_role_display_name(
+                            &rid_clone,
+                            sub_id_clone,
+                            &token_clone,
+                        )
+                        .await;
                     (rid_clone, name)
                 }
             })
@@ -674,19 +519,20 @@ impl AzureIamScanner {
             .map(|(pid, ptype)| {
                 let pid_clone = pid.clone();
                 let ptype_clone = ptype.clone();
+                let ptype_for_key = ptype.clone();
                 let token_clone = graph_token.clone();
-                let client_clone = http_client.clone();
                 let permit = semaphore.clone();
+                let client = Arc::clone(&client);
                 async move {
                     let _permit = permit.acquire().await.unwrap();
-                    let name = Self::get_principal_display_name_with_token(
-                        &pid_clone,
-                        Some(&ptype_clone),
-                        &token_clone,
-                        &client_clone,
-                    )
-                    .await;
-                    (format!("{}:{}", pid_clone, ptype_clone), name)
+                    let name = client
+                        .get_principal_display_name(
+                            &pid_clone,
+                            Some(ptype_clone),
+                            &token_clone,
+                        )
+                        .await;
+                    (format!("{}:{}", pid_clone, ptype_for_key), name)
                 }
             })
             .collect();
@@ -858,5 +704,420 @@ impl AzureIamScanner {
             ),
         );
         Ok(Value::Object(results))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infra::azure::azure_client_trait::mock::MockAzureClient;
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    fn create_test_config() -> ScanConfig {
+        let mut scan_targets = HashMap::new();
+        scan_targets.insert("role_definitions".to_string(), true);
+        scan_targets.insert("role_assignments".to_string(), true);
+
+        ScanConfig {
+            provider: "azure".to_string(),
+            account_id: None,
+            profile: None,
+            assume_role_arn: None,
+            assume_role_session_name: None,
+            tenant_id: Some("test-tenant-id".to_string()),
+            subscription_id: Some("test-subscription-id".to_string()),
+            auth_method: Some("az_login".to_string()),
+            service_principal_config: None,
+            scope_type: Some("subscription".to_string()),
+            scope_value: None,
+            scan_targets,
+            filters: HashMap::new(),
+        }
+    }
+
+    // ==================== transform_role_definition_basic テスト ====================
+
+    #[test]
+    fn test_transform_role_definition_basic_full() {
+        let role_def = json!({
+            "id": "/subscriptions/12345/providers/Microsoft.Authorization/roleDefinitions/abcdef",
+            "name": "CustomRole",
+            "description": "A custom role for testing",
+            "type": "CustomRole"
+        });
+
+        let result = AzureIamScanner::<RealAzureClient>::transform_role_definition_basic(&role_def);
+
+        assert_eq!(
+            result["role_definition_id"],
+            "/subscriptions/12345/providers/Microsoft.Authorization/roleDefinitions/abcdef"
+        );
+        assert_eq!(result["role_name"], "CustomRole");
+        assert_eq!(result["description"], "A custom role for testing");
+        assert_eq!(result["role_type"], "CustomRole");
+        assert_eq!(result["scope"], "/subscriptions/12345");
+    }
+
+    #[test]
+    fn test_transform_role_definition_basic_minimal() {
+        let role_def = json!({
+            "id": "/providers/Microsoft.Authorization/roleDefinitions/xyz",
+            "name": "MinimalRole"
+        });
+
+        let result = AzureIamScanner::<RealAzureClient>::transform_role_definition_basic(&role_def);
+
+        assert_eq!(
+            result["role_definition_id"],
+            "/providers/Microsoft.Authorization/roleDefinitions/xyz"
+        );
+        assert_eq!(result["role_name"], "MinimalRole");
+        assert_eq!(result["scope"], "");
+    }
+
+    #[test]
+    fn test_transform_role_definition_basic_with_role_name_fallback() {
+        let role_def = json!({
+            "id": "/subscriptions/12345/providers/Microsoft.Authorization/roleDefinitions/test",
+            "roleName": "Role Name from roleName field"
+        });
+
+        let result = AzureIamScanner::<RealAzureClient>::transform_role_definition_basic(&role_def);
+
+        assert_eq!(result["role_name"], "Role Name from roleName field");
+    }
+
+    #[test]
+    fn test_transform_role_definition_basic_scope_extraction() {
+        let test_cases = vec![
+            (
+                "/subscriptions/sub-123/providers/Microsoft.Authorization/roleDefinitions/role-456",
+                "/subscriptions/sub-123",
+            ),
+            (
+                "/subscriptions/sub-123/resourceGroups/rg-test/providers/Microsoft.Authorization/roleDefinitions/role-456",
+                "/subscriptions/sub-123/resourceGroups/rg-test",
+            ),
+            (
+                "/providers/Microsoft.Management/managementGroups/mg-test/providers/Microsoft.Authorization/roleDefinitions/role-456",
+                "/providers/Microsoft.Management/managementGroups/mg-test",
+            ),
+        ];
+
+        for (id, expected_scope) in test_cases {
+            let role_def = json!({
+                "id": id,
+                "name": "Test"
+            });
+
+            let result =
+                AzureIamScanner::<RealAzureClient>::transform_role_definition_basic(&role_def);
+            assert_eq!(result["scope"], expected_scope, "Failed for id: {}", id);
+        }
+    }
+
+    #[test]
+    fn test_transform_role_definition_basic_preserves_original_fields() {
+        let role_def = json!({
+            "id": "/subscriptions/12345/providers/Microsoft.Authorization/roleDefinitions/abcdef",
+            "name": "CustomRole",
+            "custom_field_1": "value1",
+            "custom_field_2": 12345,
+            "nested_object": {
+                "key": "value"
+            }
+        });
+
+        let result = AzureIamScanner::<RealAzureClient>::transform_role_definition_basic(&role_def);
+
+        // 元のフィールドが保持されていることを確認
+        assert_eq!(result["custom_field_1"], "value1");
+        assert_eq!(result["custom_field_2"], 12345);
+        assert_eq!(result["nested_object"]["key"], "value");
+    }
+
+    // ==================== scan_role_definitions モックテスト ====================
+
+    #[tokio::test]
+    async fn test_scan_role_definitions_returns_all_definitions() {
+        let mut mock_client = MockAzureClient::new();
+
+        // Azure CLIコマンドの結果を設定
+        mock_client
+            .expect_execute_az_command()
+            .returning(|_args| {
+                Ok(json!([
+                    {
+                        "id": "/subscriptions/sub-123/providers/Microsoft.Authorization/roleDefinitions/role-1",
+                        "name": "Reader",
+                        "description": "View all resources",
+                        "type": "BuiltInRole"
+                    },
+                    {
+                        "id": "/subscriptions/sub-123/providers/Microsoft.Authorization/roleDefinitions/role-2",
+                        "name": "Contributor",
+                        "description": "Manage all resources",
+                        "type": "BuiltInRole"
+                    }
+                ]))
+            });
+
+        // トークン取得を設定（失敗してフォールバック）
+        mock_client
+            .expect_get_auth_token()
+            .returning(|_| None);
+
+        let config = create_test_config();
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+
+        let result = scanner.scan_role_definitions().await.unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0]["role_name"], "Reader");
+        assert_eq!(result[1]["role_name"], "Contributor");
+    }
+
+    #[tokio::test]
+    async fn test_scan_role_definitions_with_name_filter() {
+        let mut mock_client = MockAzureClient::new();
+
+        mock_client
+            .expect_execute_az_command()
+            .returning(|_args| {
+                Ok(json!([
+                    {
+                        "id": "/subscriptions/sub-123/providers/Microsoft.Authorization/roleDefinitions/role-1",
+                        "name": "Custom-Reader",
+                        "type": "CustomRole"
+                    },
+                    {
+                        "id": "/subscriptions/sub-123/providers/Microsoft.Authorization/roleDefinitions/role-2",
+                        "name": "Contributor",
+                        "type": "BuiltInRole"
+                    },
+                    {
+                        "id": "/subscriptions/sub-123/providers/Microsoft.Authorization/roleDefinitions/role-3",
+                        "name": "Custom-Admin",
+                        "type": "CustomRole"
+                    }
+                ]))
+            });
+
+        mock_client
+            .expect_get_auth_token()
+            .returning(|_| None);
+
+        let mut config = create_test_config();
+        config.filters.insert("name_prefix".to_string(), "Custom-".to_string());
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+
+        let result = scanner.scan_role_definitions().await.unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0]["role_name"], "Custom-Reader");
+        assert_eq!(result[1]["role_name"], "Custom-Admin");
+    }
+
+    #[tokio::test]
+    async fn test_scan_role_definitions_disabled() {
+        let mock_client = MockAzureClient::new();
+
+        let mut config = create_test_config();
+        config.scan_targets.insert("role_definitions".to_string(), false);
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+
+        let result = scanner.scan_role_definitions().await.unwrap();
+
+        assert!(result.is_empty());
+    }
+
+    // ==================== scan_role_assignments モックテスト ====================
+
+    #[tokio::test]
+    async fn test_scan_role_assignments_returns_all_assignments() {
+        let mut mock_client = MockAzureClient::new();
+
+        // Azure CLIコマンドの結果を設定
+        mock_client
+            .expect_execute_az_command()
+            .returning(|_args| {
+                Ok(json!([
+                    {
+                        "name": "assignment-1",
+                        "roleDefinitionId": "/subscriptions/sub-123/providers/Microsoft.Authorization/roleDefinitions/role-1",
+                        "principalId": "principal-1",
+                        "principalType": "User",
+                        "scope": "/subscriptions/sub-123"
+                    },
+                    {
+                        "name": "assignment-2",
+                        "roleDefinitionId": "/subscriptions/sub-123/providers/Microsoft.Authorization/roleDefinitions/role-2",
+                        "principalId": "principal-2",
+                        "principalType": "ServicePrincipal",
+                        "scope": "/subscriptions/sub-123/resourceGroups/rg-1"
+                    }
+                ]))
+            });
+
+        // トークン取得を設定
+        mock_client
+            .expect_get_auth_token()
+            .returning(|_| Some("test-token".to_string()));
+
+        // HTTPクライアントを設定（None でフォールバック）
+        mock_client
+            .expect_get_http_client()
+            .returning(|| None);
+
+        let config = create_test_config();
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+
+        let result = scanner.scan_role_assignments().await.unwrap();
+
+        // HTTPクライアントがないため空の結果
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_scan_role_assignments_disabled() {
+        let mock_client = MockAzureClient::new();
+
+        let mut config = create_test_config();
+        config.scan_targets.insert("role_assignments".to_string(), false);
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+
+        let result = scanner.scan_role_assignments().await.unwrap();
+
+        assert!(result.is_empty());
+    }
+
+    // ==================== scan メソッドモックテスト ====================
+
+    #[tokio::test]
+    async fn test_scan_progress_callback() {
+        let mut mock_client = MockAzureClient::new();
+
+        // Role definitions用
+        mock_client
+            .expect_execute_az_command()
+            .returning(|_args| {
+                Ok(json!([
+                    {
+                        "id": "/subscriptions/sub-123/providers/Microsoft.Authorization/roleDefinitions/role-1",
+                        "name": "Reader"
+                    }
+                ]))
+            });
+
+        mock_client
+            .expect_get_auth_token()
+            .returning(|_| None);
+
+        mock_client
+            .expect_get_http_client()
+            .returning(|| None);
+
+        let config = create_test_config();
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+
+        let progress_values = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let progress_values_clone = Arc::clone(&progress_values);
+
+        let callback = Box::new(move |progress: u32, message: String| {
+            progress_values_clone.lock().unwrap().push((progress, message));
+        });
+
+        let result = scanner.scan(callback).await.unwrap();
+
+        // 結果を確認
+        assert_eq!(result["provider"], "azure");
+
+        // プログレスが記録されていることを確認
+        let values = progress_values.lock().unwrap();
+        assert!(!values.is_empty());
+        assert_eq!(values[0].0, 0); // 開始時は0%
+        assert!(values.last().unwrap().0 >= 90); // 終了時は90%以上
+    }
+
+    #[tokio::test]
+    async fn test_scan_error_handling() {
+        let mut mock_client = MockAzureClient::new();
+
+        // エラーを返す
+        mock_client
+            .expect_execute_az_command()
+            .returning(|_args| {
+                Err(anyhow::anyhow!("Azure CLI not found"))
+            });
+
+        let config = create_test_config();
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+
+        let callback = Box::new(|_progress: u32, _message: String| {});
+        let result = scanner.scan(callback).await;
+
+        assert!(result.is_err());
+        // エラーは context() でラップされるので、エラーチェーンに含まれることを確認
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            error_msg.contains("Azure CLI not found") || error_msg.contains("Role Definitions"),
+            "Expected error to contain 'Azure CLI not found' or 'Role Definitions', got: {}",
+            error_msg
+        );
+    }
+
+    // ==================== get_scope_args テスト ====================
+
+    #[test]
+    fn test_get_scope_args_subscription() {
+        let mock_client = MockAzureClient::new();
+        let mut config = create_test_config();
+        config.scope_type = Some("subscription".to_string());
+        config.subscription_id = Some("my-sub-123".to_string());
+
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+        let args = scanner.get_scope_args();
+
+        assert_eq!(args, vec!["--subscription", "my-sub-123"]);
+    }
+
+    #[test]
+    fn test_get_scope_args_resource_group() {
+        let mock_client = MockAzureClient::new();
+        let mut config = create_test_config();
+        config.scope_type = Some("resource_group".to_string());
+        config.subscription_id = Some("my-sub-123".to_string());
+        config.scope_value = Some("my-rg".to_string());
+
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+        let args = scanner.get_scope_args();
+
+        assert_eq!(
+            args,
+            vec![
+                "--scope",
+                "/subscriptions/my-sub-123/resourceGroups/my-rg"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_get_scope_args_management_group() {
+        let mock_client = MockAzureClient::new();
+        let mut config = create_test_config();
+        config.scope_type = Some("management_group".to_string());
+        config.scope_value = Some("my-mg".to_string());
+
+        let scanner = AzureIamScanner::new_with_client(config, mock_client);
+        let args = scanner.get_scope_args();
+
+        assert_eq!(
+            args,
+            vec![
+                "--scope",
+                "/providers/Microsoft.Management/managementGroups/my-mg"
+            ]
+        );
     }
 }

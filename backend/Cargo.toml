@@ -39,6 +39,10 @@ futures = "0.3"
 lazy_static = "1.4"
 urlencoding = "2.1"
 
+# Async trait support
+async-trait = "0.1"
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.8"
+mockall = "0.13"
