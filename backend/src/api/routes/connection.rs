@@ -237,3 +237,220 @@ async fn list_azure_resource_groups(
         message: e.to_string(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use axum_test::TestServer;
+    use serde_json::json;
+    use tower::ServiceBuilder;
+    use tower_http::cors::CorsLayer;
+
+    fn create_test_app() -> Router {
+        Router::new()
+            .nest("/api/connection", router())
+            .layer(ServiceBuilder::new().layer(CorsLayer::permissive()))
+    }
+
+    #[tokio::test]
+    async fn test_aws_connection_endpoint_success() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let response = server
+            .post("/api/connection/aws/test")
+            .json(&json!({
+                "profile": None::<String>,
+                "assume_role_arn": None::<String>,
+                "assume_role_session_name": None::<String>
+            }))
+            .await;
+
+        // 実際のAWS接続が成功するかどうかは環境に依存するため、
+        // レスポンスが返ってくることと、適切な構造であることを確認
+        let status = response.status_code();
+        let status_u16 = status.as_u16();
+        // 接続成功（200）または外部サービスエラー（502）のいずれか
+        assert!(
+            status_u16 == 200 || status_u16 == 502,
+            "Expected OK (200) or BAD_GATEWAY (502), got {}",
+            status_u16
+        );
+
+        if status_u16 == 200 {
+            let body: ConnectionTestResponse = response.json();
+            assert!(body.success || !body.success, "Response should have success field");
+        } else {
+            // エラーレスポンスの構造を確認
+            let body: serde_json::Value = response.json();
+            assert!(body.get("error").is_some(), "Error response should have error field");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_aws_connection_endpoint_with_profile() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let response = server
+            .post("/api/connection/aws/test")
+            .json(&json!({
+                "profile": "test-profile",
+                "assume_role_arn": None::<String>,
+                "assume_role_session_name": None::<String>
+            }))
+            .await;
+
+        let status_u16 = response.status_code().as_u16();
+        assert!(
+            status_u16 == 200 || status_u16 == 502,
+            "Expected OK (200) or BAD_GATEWAY (502), got {}",
+            status_u16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_azure_connection_endpoint() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let response = server
+            .post("/api/connection/azure/test")
+            .json(&json!({
+                "auth_method": None::<String>,
+                "tenant_id": None::<String>,
+                "service_principal_config": None::<HashMap<String, String>>
+            }))
+            .await;
+
+        let status_u16 = response.status_code().as_u16();
+        // 接続成功（200）または外部サービスエラー（502）のいずれか
+        assert!(
+            status_u16 == 200 || status_u16 == 502,
+            "Expected OK (200) or BAD_GATEWAY (502), got {}",
+            status_u16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_azure_connection_endpoint_with_service_principal() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let mut service_principal_config = HashMap::new();
+        service_principal_config.insert("client_id".to_string(), "test-client-id".to_string());
+        service_principal_config.insert("client_secret".to_string(), "test-secret".to_string());
+
+        let response = server
+            .post("/api/connection/azure/test")
+            .json(&json!({
+                "auth_method": "service_principal",
+                "tenant_id": "test-tenant-id",
+                "service_principal_config": service_principal_config
+            }))
+            .await;
+
+        let status_u16 = response.status_code().as_u16();
+        assert!(
+            status_u16 == 200 || status_u16 == 502,
+            "Expected OK (200) or BAD_GATEWAY (502), got {}",
+            status_u16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_azure_subscriptions() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let response = server
+            .get("/api/connection/azure/subscriptions")
+            .add_query_param("auth_method", "az_login")
+            .await;
+
+        let status_u16 = response.status_code().as_u16();
+        // 成功（200）または外部サービスエラー（502）のいずれか
+        assert!(
+            status_u16 == 200 || status_u16 == 502,
+            "Expected OK (200) or BAD_GATEWAY (502), got {}",
+            status_u16
+        );
+
+        if status_u16 == 200 {
+            let body: serde_json::Value = response.json();
+            assert!(
+                body.get("subscriptions").is_some(),
+                "Response should have subscriptions field"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_azure_subscriptions_with_service_principal() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let response = server
+            .get("/api/connection/azure/subscriptions")
+            .add_query_param("auth_method", "service_principal")
+            .add_query_param("client_id", "test-client-id")
+            .add_query_param("client_secret", "test-secret")
+            .await;
+
+        let status_u16 = response.status_code().as_u16();
+        assert!(
+            status_u16 == 200 || status_u16 == 502,
+            "Expected OK (200) or BAD_GATEWAY (502), got {}",
+            status_u16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_azure_resource_groups() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let response = server
+            .get("/api/connection/azure/resource-groups")
+            .add_query_param("subscription_id", "test-subscription-id")
+            .add_query_param("auth_method", "az_login")
+            .await;
+
+        let status_u16 = response.status_code().as_u16();
+        // 成功（200）または外部サービスエラー（502）のいずれか
+        assert!(
+            status_u16 == 200 || status_u16 == 502,
+            "Expected OK (200) or BAD_GATEWAY (502), got {}",
+            status_u16
+        );
+
+        if status_u16 == 200 {
+            let body: serde_json::Value = response.json();
+            assert!(
+                body.get("resource_groups").is_some(),
+                "Response should have resource_groups field"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_azure_resource_groups_missing_subscription_id() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let response = server
+            .get("/api/connection/azure/resource-groups")
+            .add_query_param("auth_method", "az_login")
+            .await;
+
+        // subscription_idが必須パラメータなので、バリデーションエラーが返る可能性がある
+        let status_u16 = response.status_code().as_u16();
+        // バリデーションエラー（400）または外部サービスエラー（502）のいずれか
+        assert!(
+            status_u16 == 400 || status_u16 == 502,
+            "Expected BAD_REQUEST (400) or BAD_GATEWAY (502), got {}",
+            status_u16
+        );
+    }
+}

@@ -179,3 +179,206 @@ async fn format_code(Path(generation_id): Path<String>) -> Result<Json<Value>, A
         })
         .map_err(|e| ApiError::Internal(e.to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use axum_test::TestServer;
+    use serde_json::json;
+    use std::collections::HashMap;
+    use tower::ServiceBuilder;
+    use tower_http::cors::CorsLayer;
+
+    fn create_test_app() -> Router {
+        Router::new()
+            .nest("/api/generate", router())
+            .layer(ServiceBuilder::new().layer(CorsLayer::permissive()))
+    }
+
+    #[tokio::test]
+    async fn test_check_terraform_endpoint() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let response = server.get("/api/generate/terraform/check").await;
+
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            200,
+            "check_terraform endpoint should always return OK (200), got {}",
+            status_u16
+        );
+
+        let body: serde_json::Value = response.json();
+        assert!(
+            body.get("available").is_some(),
+            "Response should have available field"
+        );
+        assert!(
+            body.get("version").is_some(),
+            "Response should have version field"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_generate_terraform_endpoint_invalid_scan_id() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let response = server
+            .post("/api/generate/terraform")
+            .json(&json!({
+                "scan_id": "non-existent-scan-id",
+                "config": {
+                    "output_path": "/tmp/test",
+                    "file_split_rule": "single",
+                    "naming_convention": "snake_case",
+                    "import_script_format": "sh",
+                    "generate_readme": true
+                },
+                "selected_resources": {}
+            }))
+            .await;
+
+        // スキャンIDが存在しない場合、内部エラー（500）が返る
+        let status_u16 = response.status_code().as_u16();
+        assert!(
+            status_u16 == 500 || status_u16 == 404,
+            "Expected INTERNAL_SERVER_ERROR (500) or NOT_FOUND (404) for invalid scan_id, got {}",
+            status_u16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_generate_terraform_endpoint_with_selected_resources() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let mut selected_resources = HashMap::new();
+        selected_resources.insert("users".to_string(), json!(["user1", "user2"]));
+
+        let response = server
+            .post("/api/generate/terraform")
+            .json(&json!({
+                "scan_id": "non-existent-scan-id",
+                "config": {
+                    "output_path": "/tmp/test",
+                    "file_split_rule": "by_resource_type",
+                    "naming_convention": "kebab-case",
+                    "import_script_format": "sh",
+                    "generate_readme": false
+                },
+                "selected_resources": selected_resources
+            }))
+            .await;
+
+        // スキャンIDが存在しない場合、内部エラー（500）が返る
+        let status_u16 = response.status_code().as_u16();
+        assert!(
+            status_u16 == 500 || status_u16 == 404,
+            "Expected INTERNAL_SERVER_ERROR (500) or NOT_FOUND (404) for invalid scan_id, got {}",
+            status_u16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_download_generated_files_not_found() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let non_existent_generation_id = "00000000-0000-0000-0000-000000000000";
+
+        let response = server
+            .get(&format!(
+                "/api/generate/{}/download",
+                non_existent_generation_id
+            ))
+            .await;
+
+        let status_u16 = response.status_code().as_u16();
+        assert_eq!(
+            status_u16,
+            404,
+            "Expected NOT_FOUND (404) for non-existent generation_id, got {}",
+            status_u16
+        );
+
+        let body: serde_json::Value = response.json();
+        assert!(
+            body.get("error").is_some(),
+            "Error response should have error field"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_generation_not_found() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let non_existent_generation_id = "00000000-0000-0000-0000-000000000000";
+
+        let response = server
+            .post(&format!(
+                "/api/generate/{}/validate",
+                non_existent_generation_id
+            ))
+            .await;
+
+        // バリデーションサービスがエラーを返す場合、内部エラー（500）が返る
+        let status_u16 = response.status_code().as_u16();
+        assert!(
+            status_u16 == 500 || status_u16 == 404,
+            "Expected INTERNAL_SERVER_ERROR (500) or NOT_FOUND (404), got {}",
+            status_u16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_check_format_not_found() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let non_existent_generation_id = "00000000-0000-0000-0000-000000000000";
+
+        let response = server
+            .get(&format!(
+                "/api/generate/{}/format/check",
+                non_existent_generation_id
+            ))
+            .await;
+
+        // フォーマットチェックサービスがエラーを返す場合、内部エラー（500）が返る
+        let status_u16 = response.status_code().as_u16();
+        assert!(
+            status_u16 == 500 || status_u16 == 404,
+            "Expected INTERNAL_SERVER_ERROR (500) or NOT_FOUND (404), got {}",
+            status_u16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_format_code_not_found() {
+        let app = create_test_app();
+        let server = TestServer::new(app.into_make_service()).unwrap();
+
+        let non_existent_generation_id = "00000000-0000-0000-0000-000000000000";
+
+        let response = server
+            .post(&format!(
+                "/api/generate/{}/format",
+                non_existent_generation_id
+            ))
+            .await;
+
+        // フォーマットサービスがエラーを返す場合、内部エラー（500）が返る
+        let status_u16 = response.status_code().as_u16();
+        assert!(
+            status_u16 == 500 || status_u16 == 404,
+            "Expected INTERNAL_SERVER_ERROR (500) or NOT_FOUND (404), got {}",
+            status_u16
+        );
+    }
+}
+
