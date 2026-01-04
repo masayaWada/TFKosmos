@@ -279,8 +279,9 @@ mod tests {
         );
 
         if status_u16 == 200 {
-            let body: ConnectionTestResponse = response.json();
-            assert!(body.success || !body.success, "Response should have success field");
+            // レスポンスが正しくConnectionTestResponse型にデシリアライズできることを確認
+            // これにより、レスポンス構造が期待通りであることが保証される
+            let _body: ConnectionTestResponse = response.json();
         } else {
             // エラーレスポンスの構造を確認
             let body: serde_json::Value = response.json();
