@@ -33,9 +33,16 @@ make tauri  # Tauriデスクトップアプリを開発モードで起動
 
 ```bash
 make build    # 開発用ビルド
-make release  # リリース用最適化ビルド
+make release  # リリース用最適化ビルド（mac/Windowsインストーラ生成含む）
 make clean    # ビルド成果物をクリーンアップ
 ```
+
+**リリースビルドで生成されるファイル:**
+
+- バックエンドバイナリ: `backend/target/release/tfkosmos`
+- Tauriインストーラ: `deployment/src-tauri/target/release/bundle/`
+  - macOS: `.dmg`, `.app`
+  - Windows: `.msi`
 
 ### コマンド一覧
 

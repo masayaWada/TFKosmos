@@ -188,3 +188,49 @@ impl ScanService {
         results.get(scan_id).and_then(|result| result.data.clone())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scan_service_exists() {
+        // Verify that ScanService can be instantiated
+        let _service = ScanService;
+    }
+
+    #[tokio::test]
+    async fn test_scan_result_not_found() {
+        // Test getting a non-existent scan result
+        let non_existent_id = "non-existent-scan-id";
+        let result = ScanService::get_scan_result(non_existent_id).await;
+
+        assert!(result.is_none(), "Expected None for non-existent scan ID");
+    }
+
+    #[tokio::test]
+    async fn test_scan_data_not_found() {
+        // Test getting data for a non-existent scan
+        let non_existent_id = "non-existent-scan-id";
+        let result = ScanService::get_scan_data(non_existent_id).await;
+
+        assert!(result.is_none(), "Expected None for non-existent scan ID");
+    }
+
+    #[tokio::test]
+    async fn test_update_progress_for_nonexistent_scan() {
+        // Test updating progress for a non-existent scan (should not panic)
+        let non_existent_id = "non-existent-scan-id";
+        ScanService::update_progress(non_existent_id, 50, "Test message".to_string()).await;
+
+        // Verify the scan was not created
+        let result = ScanService::get_scan_result(non_existent_id).await;
+        assert!(result.is_none());
+    }
+
+    // Note: Full integration tests for start_scan would require:
+    // - Mocked AWS/Azure scanners
+    // - Test credentials
+    // - LocalStack/Azurite
+    // These should be added as separate integration tests
+}

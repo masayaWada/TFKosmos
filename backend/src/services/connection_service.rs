@@ -53,3 +53,60 @@ impl ConnectionService {
         .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Note: These tests require AWS/Azure SDK mocks which are complex to set up.
+    // For now, we test the service structure and API contract.
+    // Integration tests with actual AWS/Azure test accounts should be added separately.
+
+    #[test]
+    fn test_connection_service_exists() {
+        // Verify that ConnectionService can be instantiated
+        let _service = ConnectionService;
+    }
+
+    #[tokio::test]
+    async fn test_aws_connection_accepts_optional_parameters() {
+        // This test verifies the function signature accepts None values
+        // Result may be Ok or Err depending on local AWS configuration
+        let _result = ConnectionService::test_aws_connection(None, None, None).await;
+
+        // Test passes if function completes without panicking
+        // Actual result depends on local environment (Ok if AWS configured, Err if not)
+    }
+
+    #[tokio::test]
+    async fn test_azure_connection_accepts_optional_parameters() {
+        // This test verifies the function signature accepts None values
+        // Result may be Ok or Err depending on local Azure configuration
+        let _result = ConnectionService::test_azure_connection(None, None, None).await;
+
+        // Test passes if function completes without panicking
+    }
+
+    #[tokio::test]
+    async fn test_list_azure_subscriptions_signature() {
+        // Verify function signature - result depends on local configuration
+        let _result = ConnectionService::list_azure_subscriptions(None, None, None).await;
+
+        // Test passes if function completes without panicking
+    }
+
+    #[tokio::test]
+    async fn test_list_azure_resource_groups_signature() {
+        // Verify function signature - result depends on local configuration
+        let subscription_id = "test-subscription-id".to_string();
+        let _result = ConnectionService::list_azure_resource_groups(
+            subscription_id,
+            None,
+            None,
+            None,
+        )
+        .await;
+
+        // Test passes if function completes without panicking
+    }
+}

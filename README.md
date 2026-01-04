@@ -292,6 +292,43 @@ npm run dev
 
 フロントエンドは `http://localhost:5173` で起動します。
 
+## ビルド方法 📦
+
+### 開発用ビルド
+
+開発用に最適化されたビルドを実行します：
+
+```bash
+make build
+```
+
+これにより、以下のビルドが実行されます：
+- バックエンド: `cargo build`
+- フロントエンド: `npm run build`
+
+### リリース用ビルド（インストーラ生成）
+
+本番環境用に最適化されたビルドと、デスクトップアプリのインストーラを生成します：
+
+```bash
+make release
+```
+
+**生成されるファイル:**
+
+- バックエンドバイナリ: `backend/target/release/tfkosmos`
+- Tauriデスクトップアプリのインストーラ: `deployment/src-tauri/target/release/bundle/`
+  - **macOS**: `.dmg` (インストーラ), `.app` (アプリケーションバンドル)
+  - **Windows**: `.msi` (インストーラ)
+
+### ビルド成果物のクリーンアップ
+
+ビルド成果物を削除してクリーンな状態に戻します：
+
+```bash
+make clean
+```
+
 ## プロジェクト構造
 
 ``` bash

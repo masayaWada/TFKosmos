@@ -6,7 +6,7 @@ help:
 	@echo "  make dev      - 開発環境を起動（バックエンド + フロントエンド）"
 	@echo "  make tauri    - Tauriデスクトップアプリを開発モードで起動"
 	@echo "  make build    - 開発用ビルド"
-	@echo "  make release  - リリース用最適化ビルド"
+	@echo "  make release  - リリース用最適化ビルド（mac/Windows インストーラ生成含む）"
 	@echo "  make clean    - ビルド成果物をクリーンアップ"
 
 # 開発環境を起動（バックエンド + フロントエンド）
@@ -37,13 +37,27 @@ build:
 	@cd frontend && npm run build
 	@echo "開発用ビルドが完了しました"
 
-# リリース用最適化ビルド
+# リリース用最適化ビルド（インストーラ生成含む）
 release:
 	@echo "リリース用最適化ビルドを実行しています..."
 	@cd backend && source ~/.cargo/env && cargo build --release
 	@cd frontend && npm run build
-	@echo "リリース用ビルドが完了しました"
-	@echo "バックエンドバイナリ: backend/target/release/tfkosmos"
+	@echo "Tauriデスクトップアプリのインストーラを生成しています..."
+	@if [ ! -d "deployment/node_modules" ]; then \
+		echo "deploymentディレクトリの依存関係をインストールしています..."; \
+		cd deployment && npm install; \
+	fi
+	@cd deployment && npm run tauri:build
+	@echo ""
+	@echo "✅ リリース用ビルドが完了しました"
+	@echo ""
+	@echo "📦 生成されたファイル:"
+	@echo "  - バックエンドバイナリ: backend/target/release/tfkosmos"
+	@echo "  - Tauriインストーラ: deployment/src-tauri/target/release/bundle/"
+	@echo ""
+	@echo "💡 インストーラの種類:"
+	@echo "  - macOS: .dmg, .app"
+	@echo "  - Windows: .msi"
 
 # クリーンアップ
 clean:
