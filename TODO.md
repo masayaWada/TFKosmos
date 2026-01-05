@@ -86,44 +86,54 @@
 ### テストインフラの改善
 
 #### カバレッジ測定
-- [ ] バックエンド: `tarpaulin` または `cargo-llvm-cov` の導入
+- [x] バックエンド: `cargo-llvm-cov` の導入
   ```bash
-  cargo install cargo-tarpaulin
-  cargo tarpaulin --out Html
+  cargo install cargo-llvm-cov
+  cargo llvm-cov --html
   ```
 
-- [ ] フロントエンド: Vitestカバレッジ設定の最適化
+- [x] フロントエンド: Vitestカバレッジ設定の最適化
   ```bash
   npm run test:coverage
   ```
 
-- [ ] カバレッジレポートの生成
-  - [ ] HTML形式のレポート
-  - [ ] CI/CD統合
-  - [ ] カバレッジバッジの追加
+- [x] カバレッジレポートの生成
+  - [x] HTML形式のレポート
+  - [x] CI/CD統合
+  - [ ] カバレッジバッジの追加（Codecov統合済み）
+
+- [x] Makefileへのカバレッジコマンド追加
+  - [x] `make coverage` - 全体カバレッジ
+  - [x] `make coverage-backend` - バックエンドのみ
+  - [x] `make coverage-frontend` - フロントエンドのみ
+  - [x] `make coverage-report` - レポートを開く
 
 #### CI/CDパイプライン
-- [ ] GitHub Actionsワークフローの作成
-  - [ ] バックエンドテストの自動実行
-  - [ ] フロントエンドテストの自動実行
-  - [ ] E2Eテストの自動実行
-  - [ ] カバレッジレポートの生成とアップロード
+- [x] GitHub Actionsワークフローの作成
+  - [x] バックエンドテストの自動実行（`.github/workflows/test.yml`）
+  - [x] フロントエンドテストの自動実行（`.github/workflows/test.yml`）
+  - [x] E2Eテストの自動実行（`.github/workflows/test.yml`）
+  - [x] カバレッジレポートの生成とアップロード（Codecov）
 
-- [ ] テスト実行の最適化
-  - [ ] 並列実行の設定
-  - [ ] キャッシュの活用
-  - [ ] テスト分割
+- [x] Lint/フォーマットチェックワークフロー（`.github/workflows/lint.yml`）
+  - [x] Rust: `cargo fmt` + `cargo clippy`
+  - [x] TypeScript: ESLint + Type check
+
+- [x] テスト実行の最適化
+  - [x] 並列実行の設定（ジョブ分離）
+  - [x] キャッシュの活用（Cargo, npm）
+  - [x] Makefileへのテストコマンド追加
 
 #### テストデータ管理
 - [x] フィクスチャの整備
-  - [ ] バックエンド: テストデータJSON
-  - [ ] フロントエンド: モックデータ
-  - [x] E2E: シードデータ
+  - [x] バックエンド: テストデータJSON（`src/test_helpers/fixtures.rs`）
+  - [x] フロントエンド: モックデータ（`src/test/mock-data.ts`）
+  - [x] E2E: シードデータ（`e2e/fixtures/test-data.ts`）
 
 - [x] テストヘルパーの作成
-  - [ ] バックエンド: モックビルダー
-  - [ ] フロントエンド: カスタムレンダラー
-  - [x] E2E: Page Objectパターン
+  - [x] バックエンド: モックビルダー（`src/test_helpers/builders.rs`）
+  - [x] フロントエンド: カスタムレンダラー（`src/test/test-utils.tsx`）
+  - [x] E2E: Page Objectパターン（`e2e/pages/`）
 
 ### 完全なE2Eテストスイート
 

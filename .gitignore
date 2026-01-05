@@ -104,6 +104,8 @@ out/
 coverage/
 *.lcov
 .nyc_output/
+backend/target/llvm-cov/
+frontend/coverage/
 
 # Playwright
 frontend/playwright-report/

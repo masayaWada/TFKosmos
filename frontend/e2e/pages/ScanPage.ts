@@ -30,25 +30,39 @@ export class ScanPage extends BasePage {
     super(page);
 
     // プロバイダー選択
-    this.providerSelect = page.getByLabel(/Provider/i);
+    // プロバイダーはradioボタンで「プロバイダー:」というラベルを持つ
+    this.providerSelect = page.getByLabel(/プロバイダー/i);
 
     // AWS設定
-    this.awsProfileInput = page.getByLabel(/Profile/i);
-    this.awsRegionSelect = page.getByLabel(/Region/i);
-    this.awsNamePrefixInput = page.getByLabel(/Name Prefix/i);
+    // プロファイルは日本語ラベル
+    this.awsProfileInput = page.getByLabel(/^プロファイル$/);
+    // AWSリージョン選択はScanConfigFormには存在しない（削除）
+    // 代わりにAssume Role ARNフィールドがあるが、テストでは使用しない想定
+    // 互換性のため、空のロケーターを設定（使用されない）
+    this.awsRegionSelect = page.locator('input[type="text"]').first();
+    // 名前プレフィックスは日本語ラベル
+    this.awsNamePrefixInput = page.getByLabel(/名前プレフィックス/i);
 
     // Azure設定
-    this.azureSubscriptionSelect = page.getByLabel(/Subscription/i);
-    this.azureResourceGroupSelect = page.getByLabel(/Resource Group/i);
+    // サブスクリプションは日本語ラベル
+    this.azureSubscriptionSelect = page.getByLabel(/^サブスクリプション$/);
+    // リソースグループは日本語ラベル
+    this.azureResourceGroupSelect = page.getByLabel(/^リソースグループ$/);
 
     // スキャン実行
-    this.scanButton = page.getByRole('button', { name: /Start Scan|Scan/i });
-    this.progressBar = page.locator('[role="progressbar"]');
-    this.progressText = page.locator('text=/Scanning|Processing/i');
+    // スキャンボタンは日本語テキスト
+    this.scanButton = page.getByRole('button', { name: /^スキャン実行$/ });
+    // プログレスバーはrole="progressbar"を持たないdiv要素
+    // ScanProgressBarコンポーネントのスタイルで識別
+    this.progressBar = page.locator('div').filter({ hasText: /スキャン中|スキャンを開始/i });
+    // プログレステキストは日本語
+    this.progressText = page.locator('text=/スキャン中|スキャンを開始|スキャンが完了/i');
 
     // 結果
-    this.scanCompleteMessage = page.locator('text=/Scan completed|Success/i');
-    this.scanErrorMessage = page.locator('text=/Scan failed|Error/i');
+    // スキャン完了メッセージは日本語
+    this.scanCompleteMessage = page.locator('text=/スキャンが完了|スキャン完了/i');
+    // スキャンエラーメッセージは日本語
+    this.scanErrorMessage = page.locator('text=/スキャンに失敗|エラー/i');
   }
 
   /**
@@ -62,23 +76,25 @@ export class ScanPage extends BasePage {
    * AWSプロバイダーを選択する
    */
   async selectAWSProvider() {
-    await this.providerSelect.selectOption('aws');
+    // プロバイダーはradioボタンなので、clickを使用
+    await this.page.getByRole('radio', { name: /^AWS$/ }).click();
   }
 
   /**
    * Azureプロバイダーを選択する
    */
   async selectAzureProvider() {
-    await this.providerSelect.selectOption('azure');
+    // プロバイダーはradioボタンなので、clickを使用
+    await this.page.getByRole('radio', { name: /^Azure$/ }).click();
   }
 
   /**
    * AWSスキャンを実行する
    */
-  async startAWSScan(profile: string, region: string, namePrefix?: string) {
+  async startAWSScan(profile: string, region?: string, namePrefix?: string) {
     await this.selectAWSProvider();
     await this.awsProfileInput.fill(profile);
-    await this.awsRegionSelect.selectOption(region);
+    // AWSリージョン選択はScanConfigFormには存在しないため、regionパラメータは無視
     if (namePrefix) {
       await this.awsNamePrefixInput.fill(namePrefix);
     }

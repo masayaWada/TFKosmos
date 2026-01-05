@@ -1,13 +1,21 @@
-.PHONY: dev tauri build release clean help
+.PHONY: dev tauri build release clean test test-backend test-frontend test-e2e coverage coverage-backend coverage-frontend coverage-report help
 
 # デフォルトターゲット
 help:
 	@echo "利用可能なコマンド:"
-	@echo "  make dev      - 開発環境を起動（バックエンド + フロントエンド）"
-	@echo "  make tauri    - Tauriデスクトップアプリを開発モードで起動"
-	@echo "  make build    - 開発用ビルド"
-	@echo "  make release  - リリース用最適化ビルド（mac/Windows インストーラ生成含む）"
-	@echo "  make clean    - ビルド成果物をクリーンアップ"
+	@echo "  make dev              - 開発環境を起動（バックエンド + フロントエンド）"
+	@echo "  make tauri            - Tauriデスクトップアプリを開発モードで起動"
+	@echo "  make build            - 開発用ビルド"
+	@echo "  make release          - リリース用最適化ビルド（mac/Windows インストーラ生成含む）"
+	@echo "  make test             - 全テストを実行（バックエンド + フロントエンド）"
+	@echo "  make test-backend     - バックエンドテストのみ実行"
+	@echo "  make test-frontend    - フロントエンドテストのみ実行"
+	@echo "  make test-e2e         - E2Eテストを実行"
+	@echo "  make coverage         - カバレッジレポートを生成（全体）"
+	@echo "  make coverage-backend - バックエンドカバレッジレポートを生成"
+	@echo "  make coverage-frontend- フロントエンドカバレッジレポートを生成"
+	@echo "  make coverage-report  - カバレッジレポートを開く"
+	@echo "  make clean            - ビルド成果物をクリーンアップ"
 
 # 開発環境を起動（バックエンド + フロントエンド）
 dev:
@@ -59,11 +67,56 @@ release:
 	@echo "  - macOS: .dmg, .app"
 	@echo "  - Windows: .msi"
 
+# テスト実行
+test: test-backend test-frontend
+	@echo "✅ 全テストが完了しました"
+
+test-backend:
+	@echo "バックエンドテストを実行しています..."
+	@cd backend && source ~/.cargo/env && cargo test
+	@echo "✅ バックエンドテスト完了"
+
+test-frontend:
+	@echo "フロントエンドテストを実行しています..."
+	@cd frontend && npm run test:run
+	@echo "✅ フロントエンドテスト完了"
+
+test-e2e:
+	@echo "E2Eテストを実行しています..."
+	@cd frontend && npm run test:e2e
+	@echo "✅ E2Eテスト完了"
+
+# カバレッジレポート生成
+coverage: coverage-backend coverage-frontend
+	@echo ""
+	@echo "✅ 全カバレッジレポートが生成されました"
+	@echo ""
+	@echo "📊 レポートの場所:"
+	@echo "  - バックエンド: backend/target/llvm-cov/html/index.html"
+	@echo "  - フロントエンド: frontend/coverage/index.html"
+	@echo ""
+	@echo "💡 レポートを開くには: make coverage-report"
+
+coverage-backend:
+	@echo "バックエンドカバレッジレポートを生成しています..."
+	@cd backend && source ~/.cargo/env && cargo llvm-cov --html --open
+	@echo "✅ バックエンドカバレッジレポート生成完了"
+
+coverage-frontend:
+	@echo "フロントエンドカバレッジレポートを生成しています..."
+	@cd frontend && npm run test:coverage
+	@echo "✅ フロントエンドカバレッジレポート生成完了"
+
+coverage-report:
+	@echo "カバレッジレポートを開いています..."
+	@open backend/target/llvm-cov/html/index.html 2>/dev/null || echo "バックエンドレポートが見つかりません"
+	@open frontend/coverage/index.html 2>/dev/null || echo "フロントエンドレポートが見つかりません"
+
 # クリーンアップ
 clean:
 	@echo "ビルド成果物をクリーンアップしています..."
 	@cd backend && source ~/.cargo/env && cargo clean
-	@cd frontend && rm -rf node_modules dist
+	@cd frontend && rm -rf node_modules dist coverage playwright-report test-results
 	@cd deployment/src-tauri && cargo clean 2>/dev/null || true
 	@rm -rf backend/terraform-output/* 2>/dev/null || true
 	@echo "クリーンアップが完了しました"
