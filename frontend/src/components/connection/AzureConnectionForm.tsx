@@ -98,6 +98,7 @@ export default function AzureConnectionForm() {
         <>
           <div style={{ marginBottom: "1rem" }}>
             <label
+              htmlFor="tenant-id"
               style={{
                 display: "block",
                 marginBottom: "0.5rem",
@@ -107,6 +108,7 @@ export default function AzureConnectionForm() {
               テナントID
             </label>
             <input
+              id="tenant-id"
               type="text"
               value={tenantId}
               onChange={(e) => setTenantId(e.target.value)}
@@ -121,6 +123,7 @@ export default function AzureConnectionForm() {
 
           <div style={{ marginBottom: "1rem" }}>
             <label
+              htmlFor="client-id"
               style={{
                 display: "block",
                 marginBottom: "0.5rem",
@@ -130,6 +133,7 @@ export default function AzureConnectionForm() {
               Client ID
             </label>
             <input
+              id="client-id"
               type="text"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
@@ -144,6 +148,7 @@ export default function AzureConnectionForm() {
 
           <div style={{ marginBottom: "1rem" }}>
             <label
+              htmlFor="client-secret"
               style={{
                 display: "block",
                 marginBottom: "0.5rem",
@@ -153,6 +158,7 @@ export default function AzureConnectionForm() {
               Client Secret
             </label>
             <input
+              id="client-secret"
               type="password"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}

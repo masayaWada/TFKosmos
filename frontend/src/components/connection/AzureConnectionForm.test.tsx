@@ -85,10 +85,11 @@ describe('AzureConnectionForm', () => {
       const authMethodSelect = screen.getByRole('combobox') as HTMLSelectElement;
       await user.selectOptions(authMethodSelect, 'service_principal');
 
-      // Assert
+      // Assert - textbox (テナントID, Client ID) とpasswordフィールド (Client Secret) が表示される
       await waitFor(() => {
-        const textboxes = screen.getAllByRole('textbox');
-        expect(textboxes.length).toBeGreaterThanOrEqual(3);
+        expect(screen.getByLabelText(/テナントID/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/Client ID/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/Client Secret/i)).toBeInTheDocument();
       });
     });
 
@@ -101,16 +102,16 @@ describe('AzureConnectionForm', () => {
       const authMethodSelect = screen.getByRole('combobox') as HTMLSelectElement;
       await user.selectOptions(authMethodSelect, 'service_principal');
       await waitFor(() => {
-        const textboxes = screen.getAllByRole('textbox');
-        expect(textboxes.length).toBeGreaterThanOrEqual(3);
+        expect(screen.getByLabelText(/テナントID/i)).toBeInTheDocument();
       });
 
       await user.selectOptions(authMethodSelect, 'az_login');
 
-      // Assert
+      // Assert - サービスプリンシパル設定フィールドが非表示になる
       await waitFor(() => {
-        const textboxes = screen.queryAllByRole('textbox');
-        expect(textboxes.length).toBe(0);
+        expect(screen.queryByLabelText(/テナントID/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/Client ID/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/Client Secret/i)).not.toBeInTheDocument();
       });
     });
   });
@@ -147,12 +148,10 @@ describe('AzureConnectionForm', () => {
       await user.selectOptions(authMethodSelect, 'service_principal');
 
       await waitFor(() => {
-        const textboxes = screen.getAllByRole('textbox');
-        expect(textboxes.length).toBeGreaterThanOrEqual(3);
+        expect(screen.getByLabelText(/Client ID/i)).toBeInTheDocument();
       });
 
-      const textboxes = screen.getAllByRole('textbox');
-      const clientIdInput = textboxes[1] as HTMLInputElement;
+      const clientIdInput = screen.getByLabelText(/Client ID/i) as HTMLInputElement;
       await user.clear(clientIdInput);
       await user.type(clientIdInput, 'test-client-id');
 
@@ -170,18 +169,59 @@ describe('AzureConnectionForm', () => {
       await user.selectOptions(authMethodSelect, 'service_principal');
 
       await waitFor(() => {
-        const textboxes = screen.getAllByRole('textbox');
-        expect(textboxes.length).toBeGreaterThanOrEqual(3);
+        expect(screen.getByLabelText(/Client Secret/i)).toBeInTheDocument();
       });
 
-      const textboxes = screen.getAllByRole('textbox');
-      const clientSecretInput = textboxes[2] as HTMLInputElement;
+      const clientSecretInput = screen.getByLabelText(/Client Secret/i) as HTMLInputElement;
       await user.clear(clientSecretInput);
       await user.type(clientSecretInput, 'test-client-secret');
 
       // Assert
       expect(clientSecretInput.value).toBe('test-client-secret');
       expect(clientSecretInput.type).toBe('password');
+    });
+
+    it('認証方式を切り替えても入力値が保持される', async () => {
+      // Arrange
+      const user = userEvent.setup();
+      render(<AzureConnectionForm />);
+
+      // Act
+      const authMethodSelect = screen.getByRole('combobox') as HTMLSelectElement;
+      await user.selectOptions(authMethodSelect, 'service_principal');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/テナントID/i)).toBeInTheDocument();
+      });
+
+      const tenantIdInput = screen.getByLabelText(/テナントID/i) as HTMLInputElement;
+      const clientIdInput = screen.getByLabelText(/Client ID/i) as HTMLInputElement;
+
+      await user.clear(tenantIdInput);
+      await user.type(tenantIdInput, 'test-tenant-id');
+      await user.clear(clientIdInput);
+      await user.type(clientIdInput, 'test-client-id');
+
+      // az_login に切り替え
+      await user.selectOptions(authMethodSelect, 'az_login');
+
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/テナントID/i)).not.toBeInTheDocument();
+      });
+
+      // service_principal に戻す
+      await user.selectOptions(authMethodSelect, 'service_principal');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/テナントID/i)).toBeInTheDocument();
+      });
+
+      // Assert - 入力値が保持されていることを確認
+      const tenantIdInputAfter = screen.getByLabelText(/テナントID/i) as HTMLInputElement;
+      const clientIdInputAfter = screen.getByLabelText(/Client ID/i) as HTMLInputElement;
+
+      expect(tenantIdInputAfter.value).toBe('test-tenant-id');
+      expect(clientIdInputAfter.value).toBe('test-client-id');
     });
   });
 
@@ -246,20 +286,18 @@ describe('AzureConnectionForm', () => {
       await user.selectOptions(authMethodSelect, 'service_principal');
 
       await waitFor(() => {
-        const textboxes = screen.getAllByRole('textbox');
-        expect(textboxes.length).toBeGreaterThanOrEqual(3);
+        expect(screen.getByLabelText(/テナントID/i)).toBeInTheDocument();
       });
 
-      const textboxes = screen.getAllByRole('textbox');
-      const tenantIdInput = textboxes[0] as HTMLInputElement;
+      const tenantIdInput = screen.getByLabelText(/テナントID/i) as HTMLInputElement;
       await user.clear(tenantIdInput);
       await user.type(tenantIdInput, 'test-tenant-id');
 
-      const clientIdInput = textboxes[1] as HTMLInputElement;
+      const clientIdInput = screen.getByLabelText(/Client ID/i) as HTMLInputElement;
       await user.clear(clientIdInput);
       await user.type(clientIdInput, 'test-client-id');
 
-      const clientSecretInput = textboxes[2] as HTMLInputElement;
+      const clientSecretInput = screen.getByLabelText(/Client Secret/i) as HTMLInputElement;
       await user.clear(clientSecretInput);
       await user.type(clientSecretInput, 'test-client-secret');
 
@@ -337,6 +375,94 @@ describe('AzureConnectionForm', () => {
       });
       await waitFor(() => {
         expect(testButton).not.toBeDisabled();
+      });
+    });
+
+    it('service_principalで必須フィールドが空の場合でも接続テストが実行される', async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const mockResponse = {
+        success: true,
+      };
+      vi.mocked(connectionApi.testAzure).mockResolvedValue(mockResponse);
+      render(<AzureConnectionForm />);
+
+      // Act
+      const authMethodSelect = screen.getByRole('combobox') as HTMLSelectElement;
+      await user.selectOptions(authMethodSelect, 'service_principal');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/テナントID/i)).toBeInTheDocument();
+      });
+
+      const testButton = screen.getByRole('button', { name: /接続テスト/i });
+      await user.click(testButton);
+
+      // Assert - 空の値でも接続テストが実行されることを確認
+      await waitFor(() => {
+        expect(connectionApi.testAzure).toHaveBeenCalledWith({
+          auth_method: 'service_principal',
+          service_principal_config: {
+            client_id: '',
+            client_secret: '',
+            tenant_id: '',
+          },
+        });
+      });
+    });
+
+    it('service_principalで必須フィールドが空の場合にエラーが返る', async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const error = new ApiError('テナントIDが必要です', 'VALIDATION_ERROR', 400);
+      vi.mocked(connectionApi.testAzure).mockRejectedValue(error);
+      render(<AzureConnectionForm />);
+
+      // Act
+      const authMethodSelect = screen.getByRole('combobox') as HTMLSelectElement;
+      await user.selectOptions(authMethodSelect, 'service_principal');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/テナントID/i)).toBeInTheDocument();
+      });
+
+      const testButton = screen.getByRole('button', { name: /接続テスト/i });
+      await user.click(testButton);
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByText('テナントIDが必要です')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('成功メッセージ', () => {
+    it('成功メッセージを閉じることができる', async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const mockResponse = {
+        success: true,
+        subscription_name: 'test-subscription',
+      };
+      vi.mocked(connectionApi.testAzure).mockResolvedValue(mockResponse);
+      render(<AzureConnectionForm />);
+
+      // Act
+      const testButton = screen.getByRole('button', { name: /接続テスト/i });
+      await user.click(testButton);
+
+      await waitFor(() => {
+        expect(screen.getByText(/接続成功: test-subscription/i)).toBeInTheDocument();
+      });
+
+      const buttons = screen.getAllByRole('button');
+      const closeButton = buttons.find(btn => btn.textContent === '×');
+      expect(closeButton).toBeInTheDocument();
+      await user.click(closeButton!);
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.queryByText(/接続成功: test-subscription/i)).not.toBeInTheDocument();
       });
     });
   });
