@@ -118,8 +118,10 @@ export const mockLocalStorage = {
 
 /**
  * 非同期処理を待機するヘルパー
+ * 
+ * React Testing LibraryのwaitForと名前が衝突しないよう、delayという名前にしています。
  */
-export const waitFor = async (ms: number) => {
+export const delay = async (ms: number) => {
   return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
