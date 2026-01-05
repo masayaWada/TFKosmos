@@ -684,6 +684,14 @@ describe('ScanConfigForm', () => {
   // ========================================
 
   describe('onScanCompleteコールバック', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('スキャン完了時にonScanCompleteが呼ばれる', async () => {
       // Arrange
       const user = userEvent.setup({ delay: null });
@@ -714,9 +722,7 @@ describe('ScanConfigForm', () => {
       });
 
       // Fast-forward timers to trigger status polling
-      vi.useFakeTimers();
       vi.advanceTimersByTime(500);
-      vi.useRealTimers();
 
       // Assert
       await waitFor(() => {
