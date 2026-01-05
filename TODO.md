@@ -172,16 +172,16 @@
   - [ ] localStorage統合のテスト
 
 ##### リソース関連コンポーネントのテスト
-- [ ] `components/resources/ResourceTable.tsx` のテスト
-  - [ ] テーブルレンダリングのテスト
-  - [ ] 選択機能のテスト
-  - [ ] ソート機能のテスト
-  - [ ] 詳細展開のテスト
+- [x] `components/resources/ResourceTable.tsx` のテスト（実装完了・23テスト）
+  - [x] テーブルレンダリングのテスト
+  - [x] 選択機能のテスト
+  - [x] ソート機能のテスト
+  - [x] 詳細展開のテスト
 
-- [ ] `components/resources/QueryInput.tsx` のテスト
-  - [ ] クエリ検証のテスト
-  - [ ] エラー表示のテスト
-  - [ ] クエリ実行のテスト
+- [x] `components/resources/QueryInput.tsx` のテスト（実装完了・24テスト）
+  - [x] クエリ検証のテスト
+  - [x] エラー表示のテスト
+  - [x] クエリ実行のテスト
 
 ##### テンプレート関連のテスト
 - [x] `pages/TemplatesPage.tsx` のテスト（実装完了・15テスト）
