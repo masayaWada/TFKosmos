@@ -164,12 +164,13 @@
   - [x] エラー表示のテスト
 
 ##### スキャン関連コンポーネントのテスト
-- [ ] `components/scan/ScanConfigForm.tsx` のテスト
-  - [ ] プロバイダー固有設定のテスト
-  - [ ] Azureスコープ選択のテスト
-  - [ ] スキャン実行のテスト
-  - [ ] 進捗表示のテスト
-  - [ ] localStorage統合のテスト
+- [x] `components/scan/ScanConfigForm.tsx` のテスト（実装完了・23テスト）
+  - [x] プロバイダー固有設定のテスト（AWS: profile, assumeRoleArn / Azure: localStorage統合）
+  - [x] Azureスコープ選択のテスト（サブスクリプション一覧、エラー処理）
+  - [x] スキャン実行のテスト（AWS、Azure、エラーハンドリング）
+  - [x] 進捗表示のテスト（進捗バー表示、完了時、失敗時）
+  - [x] localStorage統合のテスト（Azure接続設定の読み込み、エラー処理）
+  - [x] onScanCompleteコールバックのテスト
 
 ##### リソース関連コンポーネントのテスト
 - [x] `components/resources/ResourceTable.tsx` のテスト（実装完了・23テスト）
