@@ -105,6 +105,12 @@ coverage/
 *.lcov
 .nyc_output/
 
+# Playwright
+frontend/playwright-report/
+frontend/test-results/
+frontend/.playwright/
+frontend/screenshots/
+
 # Python (if any Python scripts remain)
 __pycache__/
 *.py[cod]
