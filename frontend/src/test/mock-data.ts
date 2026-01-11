@@ -4,7 +4,30 @@
  * テストで使用する各種モックデータを提供します。
  */
 
-import { Resource, ScanStatus, ConnectionStatus } from '../types';
+// 型定義
+interface Resource {
+  id: string;
+  type: string;
+  name: string;
+  [key: string]: any;
+}
+
+interface ScanStatus {
+  status: string;
+  progress: number;
+  message: string;
+  resources?: Resource[];
+  error?: string;
+}
+
+interface ConnectionStatus {
+  provider: string;
+  connected: boolean;
+  message: string;
+  profile?: string;
+  region?: string;
+  subscription?: string;
+}
 
 /**
  * サンプルIAMユーザー

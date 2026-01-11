@@ -60,7 +60,7 @@ function App() {
             setBackendError(null);
             return;
           }
-        } catch (error) {
+        } catch {
           // エラーは無視して再試行
           if (i === maxAttempts - 1) {
             setBackendError(

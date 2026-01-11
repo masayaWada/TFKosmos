@@ -2,6 +2,18 @@ import '@testing-library/jest-dom';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
+// Monaco Editorのためのブラウザーポリフィル
+if (typeof document !== 'undefined') {
+  // queryCommandSupported is required by Monaco Editor
+  if (!document.queryCommandSupported) {
+    document.queryCommandSupported = () => false;
+  }
+  // execCommand is required by Monaco Editor
+  if (!document.execCommand) {
+    document.execCommand = () => false;
+  }
+}
+
 // 各テスト後にクリーンアップ
 afterEach(() => {
   cleanup();

@@ -80,7 +80,7 @@ export const initialState: AppState = {
 // アクション定義
 // ========================================
 
-type Action =
+export type Action =
   // スキャン関連
   | { type: "START_SCAN"; payload: { scanId: string; provider: Provider } }
   | {
