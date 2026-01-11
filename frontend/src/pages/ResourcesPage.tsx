@@ -144,7 +144,7 @@ export default function ResourcesPage() {
         const savedIds = result.selections[activeTab] || [];
         setSelectedIds(new Set(savedIds));
       }
-    } catch (err) {
+    } catch {
       // Ignore errors when loading selections
     }
   };
@@ -228,11 +228,8 @@ export default function ResourcesPage() {
       const entityName = resource.entity_name || resource.target_name || "";
       const policyType = resource.policy_type || "managed";
       const policyId = resource.policy_arn || resource.policy_name || "";
-      return (
-        `${entityType}_${entityName}_${policyType}_${policyId}` ||
-        resource.attachment_id ||
-        resource.id
-      );
+      const compositeId = `${entityType}_${entityName}_${policyType}_${policyId}`;
+      return (compositeId !== "___") ? compositeId : (resource.attachment_id || resource.id);
     }
     if (activeTab === "role_assignments")
       return resource.assignment_id || resource.id;
@@ -244,7 +241,7 @@ export default function ResourcesPage() {
       if (cleanupType === "access_key")
         return cleanupResource?.access_key_id || resource.id;
       if (cleanupType === "login_profile")
-        return `login_profile_${cleanupResource?.user_name}` || resource.id;
+        return cleanupResource?.user_name ? `login_profile_${cleanupResource.user_name}` : resource.id;
       if (cleanupType === "mfa_device")
         return cleanupResource?.serial_number || resource.id;
     }
