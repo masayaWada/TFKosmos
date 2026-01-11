@@ -285,7 +285,10 @@ mod tests {
         } else {
             // エラーレスポンスの構造を確認
             let body: serde_json::Value = response.json();
-            assert!(body.get("error").is_some(), "Error response should have error field");
+            assert!(
+                body.get("error").is_some(),
+                "Error response should have error field"
+            );
         }
     }
 

@@ -1,7 +1,7 @@
+use crate::models::{TemplateValidationResponse, ValidationError};
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use crate::models::{ValidationError, TemplateValidationResponse};
 
 pub struct TemplateService;
 
@@ -10,7 +10,8 @@ impl TemplateService {
         let default_dir = PathBuf::from("templates_default/terraform");
         let user_dir = PathBuf::from("templates_user/terraform");
 
-        let mut template_map: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+        let mut template_map: std::collections::HashMap<String, serde_json::Value> =
+            std::collections::HashMap::new();
 
         // List default templates
         if default_dir.exists() {
@@ -24,15 +25,24 @@ impl TemplateService {
 
         let mut templates: Vec<serde_json::Value> = template_map.into_values().collect();
         templates.sort_by(|a, b| {
-            let a_type = a.get("resource_type").and_then(|v| v.as_str()).unwrap_or("");
-            let b_type = b.get("resource_type").and_then(|v| v.as_str()).unwrap_or("");
+            let a_type = a
+                .get("resource_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let b_type = b
+                .get("resource_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             a_type.cmp(b_type)
         });
 
         Ok(templates)
     }
 
-    pub async fn get_template(template_name: &str, source: Option<&str>) -> Result<serde_json::Value> {
+    pub async fn get_template(
+        template_name: &str,
+        source: Option<&str>,
+    ) -> Result<serde_json::Value> {
         let user_path = PathBuf::from("templates_user/terraform").join(template_name);
         let default_path = PathBuf::from("templates_default/terraform").join(template_name);
 
@@ -41,14 +51,20 @@ impl TemplateService {
                 if user_path.exists() {
                     (std::fs::read_to_string(user_path)?, "user")
                 } else {
-                    return Err(anyhow::anyhow!("User template not found: {}", template_name));
+                    return Err(anyhow::anyhow!(
+                        "User template not found: {}",
+                        template_name
+                    ));
                 }
             }
             Some("default") => {
                 if default_path.exists() {
                     (std::fs::read_to_string(default_path)?, "default")
                 } else {
-                    return Err(anyhow::anyhow!("Default template not found: {}", template_name));
+                    return Err(anyhow::anyhow!(
+                        "Default template not found: {}",
+                        template_name
+                    ));
                 }
             }
             _ => {
@@ -73,12 +89,12 @@ impl TemplateService {
     pub async fn create_template(template_name: &str, content: &str) -> Result<()> {
         let user_dir = PathBuf::from("templates_user/terraform");
         let template_path = user_dir.join(template_name);
-        
+
         // Create parent directories if needed (e.g., aws/, azure/)
         if let Some(parent) = template_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         std::fs::write(&template_path, content)?;
 
         Ok(())
@@ -101,7 +117,8 @@ impl TemplateService {
         context: Option<Value>,
     ) -> Result<String> {
         // Use provided context or generate sample context based on template name
-        let sample_context = context.unwrap_or_else(|| Self::generate_sample_context(template_name));
+        let sample_context =
+            context.unwrap_or_else(|| Self::generate_sample_context(template_name));
 
         // Create a temporary template file and render it
         let mut env = minijinja::Environment::new();
@@ -135,7 +152,8 @@ impl TemplateService {
         // 2. レンダリングテスト（サンプルコンテキストで）
         if errors.is_empty() {
             let sample_context = Self::generate_sample_context(template_name);
-            if let Err(e) = env.get_template(template_name)
+            if let Err(e) = env
+                .get_template(template_name)
                 .and_then(|t| t.render(&sample_context))
             {
                 errors.push(ValidationError {
@@ -249,7 +267,8 @@ impl TemplateService {
 
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("j2") {
                     // Get relative path from base_dir
-                    let relative_path = path.strip_prefix(base_dir)
+                    let relative_path = path
+                        .strip_prefix(base_dir)
                         .map_err(|_| anyhow::anyhow!("Failed to get relative path"))?
                         .to_string_lossy()
                         .replace('\\', "/");
@@ -266,7 +285,8 @@ impl TemplateService {
                         std::fs::read_to_string(&path).unwrap_or_default()
                     } else {
                         // If this is a user template, try to read default
-                        let default_path = PathBuf::from("templates_default/terraform").join(&relative_path);
+                        let default_path =
+                            PathBuf::from("templates_default/terraform").join(&relative_path);
                         if default_path.exists() {
                             std::fs::read_to_string(default_path).unwrap_or_default()
                         } else {
@@ -284,13 +304,16 @@ impl TemplateService {
                     };
 
                     // Update or insert template info
-                    template_map.insert(resource_type.clone(), json!({
-                        "resource_type": resource_type,
-                        "template_path": format!("terraform/{}", relative_path),
-                        "has_user_override": has_user_override,
-                        "default_source": default_source,
-                        "user_source": user_source
-                    }));
+                    template_map.insert(
+                        resource_type.clone(),
+                        json!({
+                            "resource_type": resource_type,
+                            "template_path": format!("terraform/{}", relative_path),
+                            "has_user_override": has_user_override,
+                            "default_source": default_source,
+                            "user_source": user_source
+                        }),
+                    );
                 } else if path.is_dir() {
                     Self::list_templates_in_dir(&path, base_dir, template_map, is_user)?;
                 }
@@ -327,12 +350,15 @@ mod tests {
 
         // Assert
         assert!(result.is_ok(), "Template should be created successfully");
-        
+
         let template_path = user_template_dir.join(template_name);
         assert!(template_path.exists(), "Template file should exist");
-        
+
         let saved_content = fs::read_to_string(&template_path).unwrap();
-        assert_eq!(saved_content, template_content, "Saved content should match");
+        assert_eq!(
+            saved_content, template_content,
+            "Saved content should match"
+        );
 
         // 元のディレクトリに戻す
         std::env::set_current_dir(original_dir).unwrap();
@@ -357,12 +383,18 @@ mod tests {
 
         // Assert
         assert!(result.is_ok(), "Template should be created successfully");
-        
+
         let template_path = user_template_dir.join("aws/iam_user.tf.j2");
-        assert!(template_path.exists(), "Template file should exist in subdirectory");
-        
+        assert!(
+            template_path.exists(),
+            "Template file should exist in subdirectory"
+        );
+
         let saved_content = fs::read_to_string(&template_path).unwrap();
-        assert_eq!(saved_content, template_content, "Saved content should match");
+        assert_eq!(
+            saved_content, template_content,
+            "Saved content should match"
+        );
 
         // 元のディレクトリに戻す
         std::env::set_current_dir(original_dir).unwrap();
@@ -409,9 +441,15 @@ mod tests {
         let result = TemplateService::delete_template("nonexistent_template.tf.j2").await;
 
         // Assert
-        assert!(result.is_err(), "Deleting non-existent template should fail");
+        assert!(
+            result.is_err(),
+            "Deleting non-existent template should fail"
+        );
         let error_msg = result.unwrap_err().to_string();
-        assert!(error_msg.contains("not found"), "Error message should indicate template not found");
+        assert!(
+            error_msg.contains("not found"),
+            "Error message should indicate template not found"
+        );
 
         // 元のディレクトリに戻す
         std::env::set_current_dir(original_dir).unwrap();
@@ -429,18 +467,17 @@ mod tests {
         // デフォルトテンプレートを作成
         fs::write(
             default_template_dir.join("iam_user.tf.j2"),
-            "default template"
-        ).unwrap();
+            "default template",
+        )
+        .unwrap();
         fs::write(
             default_template_dir.join("iam_role.tf.j2"),
-            "default role template"
-        ).unwrap();
+            "default role template",
+        )
+        .unwrap();
 
         // ユーザーテンプレートを作成（デフォルトを上書き）
-        fs::write(
-            user_template_dir.join("iam_user.tf.j2"),
-            "user template"
-        ).unwrap();
+        fs::write(user_template_dir.join("iam_user.tf.j2"), "user template").unwrap();
 
         // カレントディレクトリを一時ディレクトリに変更
         let original_dir = std::env::current_dir().unwrap();
@@ -452,17 +489,22 @@ mod tests {
         // Assert
         assert!(result.is_ok(), "List templates should succeed");
         let templates = result.unwrap();
-        
+
         // テンプレートが存在することを確認
         assert!(!templates.is_empty(), "Should have templates");
-        
+
         // iam_userテンプレートがユーザーオーバーライドを持っていることを確認
-        let iam_user_template = templates.iter()
-            .find(|t| t.get("resource_type")
+        let iam_user_template = templates.iter().find(|t| {
+            t.get("resource_type")
                 .and_then(|v| v.as_str())
-                .unwrap_or("") == "aws/iam_user.tf.j2");
-        assert!(iam_user_template.is_some(), "iam_user template should exist");
-        
+                .unwrap_or("")
+                == "aws/iam_user.tf.j2"
+        });
+        assert!(
+            iam_user_template.is_some(),
+            "iam_user template should exist"
+        );
+
         let iam_user = iam_user_template.unwrap();
         assert_eq!(
             iam_user.get("has_user_override").and_then(|v| v.as_bool()),
@@ -606,13 +648,20 @@ mod tests {
         });
 
         // Act
-        let result = TemplateService::preview_template(template_name, template_content, Some(context)).await;
+        let result =
+            TemplateService::preview_template(template_name, template_content, Some(context)).await;
 
         // Assert
         assert!(result.is_ok(), "Template preview should succeed");
         let preview = result.unwrap();
-        assert!(preview.contains("test_user"), "Preview should contain resource_name");
-        assert!(preview.contains("test-user"), "Preview should contain user_name");
+        assert!(
+            preview.contains("test_user"),
+            "Preview should contain resource_name"
+        );
+        assert!(
+            preview.contains("test-user"),
+            "Preview should contain user_name"
+        );
     }
 
     #[tokio::test]
@@ -627,15 +676,21 @@ mod tests {
         let result = TemplateService::preview_template(template_name, template_content, None).await;
 
         // Assert
-        assert!(result.is_ok(), "Template preview should succeed with default context");
+        assert!(
+            result.is_ok(),
+            "Template preview should succeed with default context"
+        );
         let preview = result.unwrap();
-        assert!(preview.contains("example_user"), "Preview should contain default resource_name");
+        assert!(
+            preview.contains("example_user"),
+            "Preview should contain default resource_name"
+        );
     }
 
     #[tokio::test]
     async fn test_validate_template_valid_jinja2() {
         // 正しいJinja2テンプレートの検証
-        let template_name = "iam_user.tf.j2";  // generate_sample_context() が認識できる名前に変更
+        let template_name = "iam_user.tf.j2"; // generate_sample_context() が認識できる名前に変更
         let valid_content = r#"
 resource "aws_iam_user" "{{ resource_name }}" {
   name = "{{ user.user_name }}"
@@ -648,7 +703,11 @@ resource "aws_iam_user" "{{ resource_name }}" {
             .unwrap();
 
         assert!(result.valid, "Valid template should pass validation");
-        assert_eq!(result.errors.len(), 0, "Valid template should have no errors");
+        assert_eq!(
+            result.errors.len(),
+            0,
+            "Valid template should have no errors"
+        );
     }
 
     #[tokio::test]
@@ -666,7 +725,10 @@ resource "aws_iam_user" "{{ resource_name" {
             .unwrap();
 
         assert!(!result.valid, "Invalid template should fail validation");
-        assert!(!result.errors.is_empty(), "Invalid template should have errors");
+        assert!(
+            !result.errors.is_empty(),
+            "Invalid template should have errors"
+        );
         assert_eq!(result.errors[0].error_type, "jinja2");
     }
 
@@ -685,7 +747,10 @@ resource "aws_iam_user" "{{ resource_name }}" {
             .unwrap();
 
         // 存在しないフィルターはレンダリングエラーになる
-        assert!(!result.valid, "Template with invalid filter should fail validation");
+        assert!(
+            !result.valid,
+            "Template with invalid filter should fail validation"
+        );
         assert!(!result.errors.is_empty(), "Should have rendering errors");
         assert_eq!(result.errors[0].error_type, "jinja2");
     }
@@ -728,7 +793,10 @@ resource "aws_iam_user" "{{ resource_name }}" {
             .await
             .unwrap();
 
-        assert!(result.valid, "Complex valid template should pass validation");
+        assert!(
+            result.valid,
+            "Complex valid template should pass validation"
+        );
         assert_eq!(result.errors.len(), 0);
     }
 }

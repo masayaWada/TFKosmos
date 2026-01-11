@@ -1,4 +1,4 @@
-use super::lexer::{Token, Operator, LogicalOp};
+use super::lexer::{LogicalOp, Operator, Token};
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -89,7 +89,11 @@ impl QueryParser {
 
         let value = self.parse_value()?;
 
-        Ok(Expr::Comparison { field, operator, value })
+        Ok(Expr::Comparison {
+            field,
+            operator,
+            value,
+        })
     }
 
     fn parse_field_path(&mut self) -> Result<Vec<String>, String> {
@@ -99,7 +103,10 @@ impl QueryParser {
             path.push(name.clone());
             self.advance();
         } else {
-            return Err(format!("Expected identifier, got {:?}", self.current_token()));
+            return Err(format!(
+                "Expected identifier, got {:?}",
+                self.current_token()
+            ));
         }
 
         while self.match_token(&Token::Dot) {
@@ -108,7 +115,10 @@ impl QueryParser {
                 path.push(name.clone());
                 self.advance();
             } else {
-                return Err(format!("Expected identifier after '.', got {:?}", self.current_token()));
+                return Err(format!(
+                    "Expected identifier after '.', got {:?}",
+                    self.current_token()
+                ));
             }
         }
 
@@ -210,7 +220,11 @@ mod tests {
         let expr = parser.parse().unwrap();
 
         match expr {
-            Expr::Comparison { field, operator, value } => {
+            Expr::Comparison {
+                field,
+                operator,
+                value,
+            } => {
                 assert_eq!(field, vec!["user_name".to_string()]);
                 assert!(matches!(operator, Operator::Eq));
                 assert!(matches!(value, Value::String(s) if s == "admin"));
@@ -281,12 +295,10 @@ mod tests {
         let expr = parser.parse().unwrap();
 
         match expr {
-            Expr::And(left, _) => {
-                match *left {
-                    Expr::Or(_, _) => {}
-                    _ => panic!("Expected Or expression inside And, got: {:?}", *left),
-                }
-            }
+            Expr::And(left, _) => match *left {
+                Expr::Or(_, _) => {}
+                _ => panic!("Expected Or expression inside And, got: {:?}", *left),
+            },
             _ => panic!("Expected And expression, got: {:?}", expr),
         }
     }
@@ -299,7 +311,9 @@ mod tests {
         let expr = parser.parse().unwrap();
 
         match expr {
-            Expr::Comparison { operator, value, .. } => {
+            Expr::Comparison {
+                operator, value, ..
+            } => {
                 assert!(matches!(operator, Operator::In));
                 match value {
                     Value::Array(arr) => {

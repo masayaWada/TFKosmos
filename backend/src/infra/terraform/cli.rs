@@ -80,10 +80,13 @@ impl TerraformCli {
             .output()?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let result: serde_json::Value = serde_json::from_str(&stdout)
-            .unwrap_or_else(|_| serde_json::json!({"valid": false}));
+        let result: serde_json::Value =
+            serde_json::from_str(&stdout).unwrap_or_else(|_| serde_json::json!({"valid": false}));
 
-        let valid = result.get("valid").and_then(|v| v.as_bool()).unwrap_or(false);
+        let valid = result
+            .get("valid")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         let mut errors = Vec::new();
         let mut warnings = Vec::new();

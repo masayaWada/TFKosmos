@@ -21,12 +21,7 @@ impl ConnectionService {
         tenant_id: Option<String>,
         service_principal_config: Option<HashMap<String, String>>,
     ) -> Result<ConnectionTestResponse> {
-        AzureClientFactory::test_connection(
-            auth_method,
-            tenant_id,
-            service_principal_config,
-        )
-        .await
+        AzureClientFactory::test_connection(auth_method, tenant_id, service_principal_config).await
     }
 
     pub async fn list_azure_subscriptions(
@@ -99,13 +94,8 @@ mod tests {
     async fn test_list_azure_resource_groups_signature() {
         // Verify function signature - result depends on local configuration
         let subscription_id = "test-subscription-id".to_string();
-        let _result = ConnectionService::list_azure_resource_groups(
-            subscription_id,
-            None,
-            None,
-            None,
-        )
-        .await;
+        let _result =
+            ConnectionService::list_azure_resource_groups(subscription_id, None, None, None).await;
 
         // Test passes if function completes without panicking
     }

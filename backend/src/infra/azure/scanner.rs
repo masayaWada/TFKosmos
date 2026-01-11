@@ -153,7 +153,10 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
         let az_start = std::time::Instant::now();
         debug!("Azure CLIコマンド実行開始: az role definition list");
         let json = self.client.execute_az_command(args.clone()).await?;
-        debug!(elapsed_ms = az_start.elapsed().as_millis(), "Azure CLIコマンド完了");
+        debug!(
+            elapsed_ms = az_start.elapsed().as_millis(),
+            "Azure CLIコマンド完了"
+        );
 
         // まず、すべてのrole definitionを収集
         let filter_start = std::time::Instant::now();
@@ -177,7 +180,11 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
                 Some(rd.clone())
             })
             .collect();
-        debug!(count = role_definitions_vec.len(), elapsed_ms = filter_start.elapsed().as_millis(), "フィルタリング完了");
+        debug!(
+            count = role_definitions_vec.len(),
+            elapsed_ms = filter_start.elapsed().as_millis(),
+            "フィルタリング完了"
+        );
 
         // ユニークなrole definition IDを収集して並列で表示名を取得
         let unique_start = std::time::Instant::now();
@@ -192,18 +199,28 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
                 }
             }
         }
-        debug!(count = unique_role_def_ids.len(), elapsed_ms = unique_start.elapsed().as_millis(), "ユニークなRole Definition ID収集完了");
+        debug!(
+            count = unique_role_def_ids.len(),
+            elapsed_ms = unique_start.elapsed().as_millis(),
+            "ユニークなRole Definition ID収集完了"
+        );
 
         // 並列で表示名を取得（同時実行数を制限）
         let api_start = std::time::Instant::now();
-        debug!(count = unique_role_def_ids.len(), "Role Definition表示名の並列取得開始");
+        debug!(
+            count = unique_role_def_ids.len(),
+            "Role Definition表示名の並列取得開始"
+        );
 
         // トークンを事前に取得してキャッシュ
         let token_start = std::time::Instant::now();
         let scope = "https://management.azure.com/.default";
         let token = match self.client.get_auth_token(scope).await {
             Some(token) => {
-                debug!(elapsed_ms = token_start.elapsed().as_millis(), "トークン取得完了");
+                debug!(
+                    elapsed_ms = token_start.elapsed().as_millis(),
+                    "トークン取得完了"
+                );
                 token
             }
             None => {
@@ -212,7 +229,11 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
                     .iter()
                     .map(Self::transform_role_definition_basic)
                     .collect();
-                info!(count = role_definitions.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Definitionsスキャン完了");
+                info!(
+                    count = role_definitions.len(),
+                    elapsed_ms = start_time.elapsed().as_millis(),
+                    "Role Definitionsスキャン完了"
+                );
                 return Ok(role_definitions);
             }
         };
@@ -224,7 +245,11 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
                 .iter()
                 .map(Self::transform_role_definition_basic)
                 .collect();
-            info!(count = role_definitions.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Definitionsスキャン完了");
+            info!(
+                count = role_definitions.len(),
+                elapsed_ms = start_time.elapsed().as_millis(),
+                "Role Definitionsスキャン完了"
+            );
             return Ok(role_definitions);
         }
 
@@ -243,11 +268,7 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
                 async move {
                     let _permit = permit.acquire().await.unwrap();
                     let name = client
-                        .get_role_display_name(
-                            &rid_clone,
-                            sub_id_clone,
-                            &token_clone,
-                        )
+                        .get_role_display_name(&rid_clone, sub_id_clone, &token_clone)
                         .await;
                     (rid_clone, name)
                 }
@@ -258,7 +279,10 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
         for (rid, name) in display_names {
             role_def_id_to_name.insert(rid, name);
         }
-        debug!(elapsed_ms = api_start.elapsed().as_millis(), "Role Definition表示名取得完了");
+        debug!(
+            elapsed_ms = api_start.elapsed().as_millis(),
+            "Role Definition表示名取得完了"
+        );
 
         // 各role definitionに対して表示名を設定
         let mut role_definitions = Vec::new();
@@ -346,7 +370,11 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
             role_definitions.push(Value::Object(transformed));
         }
 
-        info!(count = role_definitions.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Definitionsスキャン完了");
+        info!(
+            count = role_definitions.len(),
+            elapsed_ms = start_time.elapsed().as_millis(),
+            "Role Definitionsスキャン完了"
+        );
         Ok(role_definitions)
     }
 
@@ -380,7 +408,10 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
         let az_start = std::time::Instant::now();
         debug!("Azure CLIコマンド実行開始: az role assignment list");
         let json = self.client.execute_az_command(args.clone()).await?;
-        debug!(elapsed_ms = az_start.elapsed().as_millis(), "Azure CLIコマンド完了");
+        debug!(
+            elapsed_ms = az_start.elapsed().as_millis(),
+            "Azure CLIコマンド完了"
+        );
 
         // まず、すべてのrole assignmentを収集
         let filter_start = std::time::Instant::now();
@@ -405,7 +436,11 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
                 Some(ra.clone())
             })
             .collect();
-        debug!(count = role_assignments_vec.len(), elapsed_ms = filter_start.elapsed().as_millis(), "フィルタリング完了");
+        debug!(
+            count = role_assignments_vec.len(),
+            elapsed_ms = filter_start.elapsed().as_millis(),
+            "フィルタリング完了"
+        );
 
         // ユニークなrole definition IDとprincipal IDを収集
         let unique_start = std::time::Instant::now();
@@ -456,7 +491,10 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
         let mgmt_scope = "https://management.azure.com/.default";
         let mgmt_token = match self.client.get_auth_token(mgmt_scope).await {
             Some(token) => {
-                debug!(elapsed_ms = mgmt_token_start.elapsed().as_millis(), "Management APIトークン取得完了");
+                debug!(
+                    elapsed_ms = mgmt_token_start.elapsed().as_millis(),
+                    "Management APIトークン取得完了"
+                );
                 token
             }
             None => {
@@ -470,7 +508,10 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
         let graph_scope = "https://graph.microsoft.com/.default";
         let graph_token = match self.client.get_auth_token(graph_scope).await {
             Some(token) => {
-                debug!(elapsed_ms = graph_token_start.elapsed().as_millis(), "Graph APIトークン取得完了");
+                debug!(
+                    elapsed_ms = graph_token_start.elapsed().as_millis(),
+                    "Graph APIトークン取得完了"
+                );
                 token
             }
             None => {
@@ -502,11 +543,7 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
                 async move {
                     let _permit = permit.acquire().await.unwrap();
                     let name = client
-                        .get_role_display_name(
-                            &rid_clone,
-                            sub_id_clone,
-                            &token_clone,
-                        )
+                        .get_role_display_name(&rid_clone, sub_id_clone, &token_clone)
                         .await;
                     (rid_clone, name)
                 }
@@ -526,11 +563,7 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
                 async move {
                     let _permit = permit.acquire().await.unwrap();
                     let name = client
-                        .get_principal_display_name(
-                            &pid_clone,
-                            Some(ptype_clone),
-                            &token_clone,
-                        )
+                        .get_principal_display_name(&pid_clone, Some(ptype_clone), &token_clone)
                         .await;
                     (format!("{}:{}", pid_clone, ptype_for_key), name)
                 }
@@ -548,7 +581,10 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
         for (key, name) in principal_results {
             principal_id_to_name.insert(key, name);
         }
-        debug!(elapsed_ms = api_start.elapsed().as_millis(), "表示名取得完了");
+        debug!(
+            elapsed_ms = api_start.elapsed().as_millis(),
+            "表示名取得完了"
+        );
 
         // 各role assignmentに対して表示名を設定
         let mut transformed_assignments = Vec::new();
@@ -646,7 +682,11 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
             transformed_assignments.push(Value::Object(transformed));
         }
 
-        info!(count = transformed_assignments.len(), elapsed_ms = start_time.elapsed().as_millis(), "Role Assignmentsスキャン完了");
+        info!(
+            count = transformed_assignments.len(),
+            elapsed_ms = start_time.elapsed().as_millis(),
+            "Role Assignmentsスキャン完了"
+        );
         Ok(transformed_assignments)
     }
 
@@ -695,7 +735,10 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
             format!("Role Assignmentsのスキャン完了: {}件", role_assign_count),
         );
 
-        info!(elapsed_ms = scan_start.elapsed().as_millis(), "Azure IAMスキャン完了");
+        info!(
+            elapsed_ms = scan_start.elapsed().as_millis(),
+            "Azure IAMスキャン完了"
+        );
         progress_callback(
             100,
             format!(
@@ -864,9 +907,7 @@ mod tests {
             });
 
         // トークン取得を設定（失敗してフォールバック）
-        mock_client
-            .expect_get_auth_token()
-            .returning(|_| None);
+        mock_client.expect_get_auth_token().returning(|_| None);
 
         let config = create_test_config();
         let scanner = AzureIamScanner::new_with_client(config, mock_client);
@@ -904,12 +945,12 @@ mod tests {
                 ]))
             });
 
-        mock_client
-            .expect_get_auth_token()
-            .returning(|_| None);
+        mock_client.expect_get_auth_token().returning(|_| None);
 
         let mut config = create_test_config();
-        config.filters.insert("name_prefix".to_string(), "Custom-".to_string());
+        config
+            .filters
+            .insert("name_prefix".to_string(), "Custom-".to_string());
         let scanner = AzureIamScanner::new_with_client(config, mock_client);
 
         let result = scanner.scan_role_definitions().await.unwrap();
@@ -924,7 +965,9 @@ mod tests {
         let mock_client = MockAzureClient::new();
 
         let mut config = create_test_config();
-        config.scan_targets.insert("role_definitions".to_string(), false);
+        config
+            .scan_targets
+            .insert("role_definitions".to_string(), false);
         let scanner = AzureIamScanner::new_with_client(config, mock_client);
 
         let result = scanner.scan_role_definitions().await.unwrap();
@@ -966,9 +1009,7 @@ mod tests {
             .returning(|_| Some("test-token".to_string()));
 
         // HTTPクライアントを設定（None でフォールバック）
-        mock_client
-            .expect_get_http_client()
-            .returning(|| None);
+        mock_client.expect_get_http_client().returning(|| None);
 
         let config = create_test_config();
         let scanner = AzureIamScanner::new_with_client(config, mock_client);
@@ -984,7 +1025,9 @@ mod tests {
         let mock_client = MockAzureClient::new();
 
         let mut config = create_test_config();
-        config.scan_targets.insert("role_assignments".to_string(), false);
+        config
+            .scan_targets
+            .insert("role_assignments".to_string(), false);
         let scanner = AzureIamScanner::new_with_client(config, mock_client);
 
         let result = scanner.scan_role_assignments().await.unwrap();
@@ -1010,13 +1053,9 @@ mod tests {
                 ]))
             });
 
-        mock_client
-            .expect_get_auth_token()
-            .returning(|_| None);
+        mock_client.expect_get_auth_token().returning(|_| None);
 
-        mock_client
-            .expect_get_http_client()
-            .returning(|| None);
+        mock_client.expect_get_http_client().returning(|| None);
 
         let config = create_test_config();
         let scanner = AzureIamScanner::new_with_client(config, mock_client);
@@ -1025,7 +1064,10 @@ mod tests {
         let progress_values_clone = Arc::clone(&progress_values);
 
         let callback = Box::new(move |progress: u32, message: String| {
-            progress_values_clone.lock().unwrap().push((progress, message));
+            progress_values_clone
+                .lock()
+                .unwrap()
+                .push((progress, message));
         });
 
         let result = scanner.scan(callback).await.unwrap();
@@ -1047,9 +1089,7 @@ mod tests {
         // エラーを返す
         mock_client
             .expect_execute_az_command()
-            .returning(|_args| {
-                Err(anyhow::anyhow!("Azure CLI not found"))
-            });
+            .returning(|_args| Err(anyhow::anyhow!("Azure CLI not found")));
 
         let config = create_test_config();
         let scanner = AzureIamScanner::new_with_client(config, mock_client);
@@ -1095,10 +1135,7 @@ mod tests {
 
         assert_eq!(
             args,
-            vec![
-                "--scope",
-                "/subscriptions/my-sub-123/resourceGroups/my-rg"
-            ]
+            vec!["--scope", "/subscriptions/my-sub-123/resourceGroups/my-rg"]
         );
     }
 

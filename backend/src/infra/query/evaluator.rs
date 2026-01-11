@@ -1,5 +1,5 @@
-use super::parser::{Expr, Value};
 use super::lexer::Operator;
+use super::parser::{Expr, Value};
 use serde_json::Value as JsonValue;
 
 pub struct QueryEvaluator;
@@ -7,7 +7,11 @@ pub struct QueryEvaluator;
 impl QueryEvaluator {
     pub fn evaluate(expr: &Expr, resource: &JsonValue) -> bool {
         match expr {
-            Expr::Comparison { field, operator, value } => {
+            Expr::Comparison {
+                field,
+                operator,
+                value,
+            } => {
                 let field_value = Self::get_nested_field(resource, field);
                 Self::compare(field_value, operator, value)
             }
@@ -115,9 +119,9 @@ impl QueryEvaluator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use crate::infra::query::lexer::Lexer;
     use crate::infra::query::parser::QueryParser;
+    use serde_json::json;
 
     #[test]
     fn test_evaluate_simple_eq() {
@@ -292,6 +296,9 @@ mod tests {
         assert!(QueryEvaluator::wildcard_match("hello world", "*"));
         assert!(QueryEvaluator::wildcard_match("hello", "hello"));
         assert!(!QueryEvaluator::wildcard_match("hello", "world"));
-        assert!(QueryEvaluator::wildcard_match("/admin/users/123", "/admin/*"));
+        assert!(QueryEvaluator::wildcard_match(
+            "/admin/users/123",
+            "/admin/*"
+        ));
     }
 }

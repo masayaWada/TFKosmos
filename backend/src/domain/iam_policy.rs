@@ -111,10 +111,16 @@ mod tests {
 
         assert_eq!(doc.statements[0].sid, Some("AllowS3Access".to_string()));
         assert_eq!(doc.statements[0].effect, "Allow");
-        assert!(matches!(&doc.statements[0].action, Some(ActionList::Single(_))));
+        assert!(matches!(
+            &doc.statements[0].action,
+            Some(ActionList::Single(_))
+        ));
 
         assert_eq!(doc.statements[1].sid, None);
-        assert!(matches!(&doc.statements[1].action, Some(ActionList::Multiple(_))));
+        assert!(matches!(
+            &doc.statements[1].action,
+            Some(ActionList::Multiple(_))
+        ));
     }
 
     #[test]
@@ -122,7 +128,13 @@ mod tests {
         let single = ActionList::Single("s3:GetObject".to_string());
         assert_eq!(single.as_vec(), vec!["s3:GetObject".to_string()]);
 
-        let multiple = ActionList::Multiple(vec!["s3:ListBucket".to_string(), "s3:PutObject".to_string()]);
-        assert_eq!(multiple.as_vec(), vec!["s3:ListBucket".to_string(), "s3:PutObject".to_string()]);
+        let multiple = ActionList::Multiple(vec![
+            "s3:ListBucket".to_string(),
+            "s3:PutObject".to_string(),
+        ]);
+        assert_eq!(
+            multiple.as_vec(),
+            vec!["s3:ListBucket".to_string(), "s3:PutObject".to_string()]
+        );
     }
 }

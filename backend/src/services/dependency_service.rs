@@ -9,10 +9,7 @@ pub struct DependencyService;
 
 impl DependencyService {
     /// 依存関係グラフを取得する
-    pub async fn get_dependencies(
-        scan_id: &str,
-        root_id: Option<&str>,
-    ) -> Result<DependencyGraph> {
+    pub async fn get_dependencies(scan_id: &str, root_id: Option<&str>) -> Result<DependencyGraph> {
         let scan_data = ScanService::get_scan_data(scan_id)
             .await
             .ok_or_else(|| anyhow::anyhow!("Scan not found"))?;
@@ -169,16 +166,11 @@ impl DependencyService {
         let mut edges = Vec::new();
 
         // ロール定義ノードを追加
-        if let Some(role_definitions) = scan_data
-            .get("role_definitions")
-            .and_then(|r| r.as_array())
+        if let Some(role_definitions) = scan_data.get("role_definitions").and_then(|r| r.as_array())
         {
             for role_def in role_definitions {
                 if let Some(id) = role_def.get("id").and_then(|i| i.as_str()) {
-                    let name = role_def
-                        .get("name")
-                        .and_then(|n| n.as_str())
-                        .unwrap_or(id);
+                    let name = role_def.get("name").and_then(|n| n.as_str()).unwrap_or(id);
                     nodes.push(DependencyNode {
                         id: format!("role_definition:{}", id),
                         node_type: "role_definition".to_string(),
@@ -190,9 +182,7 @@ impl DependencyService {
         }
 
         // ロール割り当てからノードとエッジを作成
-        if let Some(role_assignments) = scan_data
-            .get("role_assignments")
-            .and_then(|r| r.as_array())
+        if let Some(role_assignments) = scan_data.get("role_assignments").and_then(|r| r.as_array())
         {
             for assignment in role_assignments {
                 if let (Some(principal_id), Some(role_def_id)) = (
@@ -237,7 +227,11 @@ impl DependencyService {
     }
 
     /// root_idから到達可能なノードのみを残す（BFS使用）
-    fn filter_by_root(nodes: &mut Vec<DependencyNode>, edges: &mut Vec<DependencyEdge>, root_id: &str) {
+    fn filter_by_root(
+        nodes: &mut Vec<DependencyNode>,
+        edges: &mut Vec<DependencyEdge>,
+        root_id: &str,
+    ) {
         let mut reachable: HashSet<String> = HashSet::new();
         let mut queue: VecDeque<String> = VecDeque::new();
 

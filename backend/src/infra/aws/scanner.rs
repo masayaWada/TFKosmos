@@ -327,7 +327,9 @@ impl<C: IamClientOps> AwsIamScanner<C> {
                 }
 
                 // インラインポリシーを取得
-                if let Ok(inline_policies) = self.iam_client.list_user_policies(&user.user_name).await {
+                if let Ok(inline_policies) =
+                    self.iam_client.list_user_policies(&user.user_name).await
+                {
                     for policy_name in inline_policies {
                         user_policies.push(json!({
                             "user_name": user.user_name,
@@ -338,7 +340,11 @@ impl<C: IamClientOps> AwsIamScanner<C> {
                 }
 
                 // アタッチされたマネージドポリシーを取得
-                if let Ok(attached_policies) = self.iam_client.list_attached_user_policies(&user.user_name).await {
+                if let Ok(attached_policies) = self
+                    .iam_client
+                    .list_attached_user_policies(&user.user_name)
+                    .await
+                {
                     for policy in attached_policies {
                         user_policies.push(json!({
                             "user_name": user.user_name,
@@ -360,7 +366,9 @@ impl<C: IamClientOps> AwsIamScanner<C> {
                 }
 
                 // インラインポリシーを取得
-                if let Ok(inline_policies) = self.iam_client.list_group_policies(&group.group_name).await {
+                if let Ok(inline_policies) =
+                    self.iam_client.list_group_policies(&group.group_name).await
+                {
                     for policy_name in inline_policies {
                         group_policies.push(json!({
                             "group_name": group.group_name,
@@ -371,7 +379,11 @@ impl<C: IamClientOps> AwsIamScanner<C> {
                 }
 
                 // アタッチされたマネージドポリシーを取得
-                if let Ok(attached_policies) = self.iam_client.list_attached_group_policies(&group.group_name).await {
+                if let Ok(attached_policies) = self
+                    .iam_client
+                    .list_attached_group_policies(&group.group_name)
+                    .await
+                {
                     for policy in attached_policies {
                         group_policies.push(json!({
                             "group_name": group.group_name,
@@ -393,7 +405,9 @@ impl<C: IamClientOps> AwsIamScanner<C> {
                 }
 
                 // インラインポリシーを取得
-                if let Ok(inline_policies) = self.iam_client.list_role_policies(&role.role_name).await {
+                if let Ok(inline_policies) =
+                    self.iam_client.list_role_policies(&role.role_name).await
+                {
                     for policy_name in inline_policies {
                         role_policies.push(json!({
                             "role_name": role.role_name,
@@ -404,7 +418,11 @@ impl<C: IamClientOps> AwsIamScanner<C> {
                 }
 
                 // アタッチされたマネージドポリシーを取得
-                if let Ok(attached_policies) = self.iam_client.list_attached_role_policies(&role.role_name).await {
+                if let Ok(attached_policies) = self
+                    .iam_client
+                    .list_attached_role_policies(&role.role_name)
+                    .await
+                {
                     for policy in attached_policies {
                         role_policies.push(json!({
                             "role_name": role.role_name,
@@ -607,10 +625,15 @@ impl<C: IamClientOps> AwsIamScanner<C> {
 mod tests {
     use super::*;
     use crate::infra::aws::iam_client_trait::mock::MockIamClient;
-    use crate::infra::aws::iam_client_trait::{IamGroupInfo, IamPolicyInfo, IamRoleInfo, IamUserInfo, PolicyAttachment};
+    use crate::infra::aws::iam_client_trait::{
+        IamGroupInfo, IamPolicyInfo, IamRoleInfo, IamUserInfo, PolicyAttachment,
+    };
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    fn create_test_config(filters: HashMap<String, String>, scan_targets: HashMap<String, bool>) -> ScanConfig {
+    fn create_test_config(
+        filters: HashMap<String, String>,
+        scan_targets: HashMap<String, bool>,
+    ) -> ScanConfig {
         ScanConfig {
             provider: "aws".to_string(),
             account_id: None,
@@ -659,7 +682,10 @@ mod tests {
         let stmt = &result[0];
         assert_eq!(stmt["effect"], "Allow");
         assert_eq!(stmt["principal_type"], "Service");
-        assert_eq!(stmt["principal_identifiers"], json!(["lambda.amazonaws.com"]));
+        assert_eq!(
+            stmt["principal_identifiers"],
+            json!(["lambda.amazonaws.com"])
+        );
         assert_eq!(stmt["actions"], json!(["sts:AssumeRole"]));
     }
 
@@ -733,7 +759,10 @@ mod tests {
         let stmt = &result[0];
         assert_eq!(stmt["effect"], "Allow");
         assert_eq!(stmt["principal_type"], "Service");
-        assert_eq!(stmt["principal_identifiers"], json!(["lambda.amazonaws.com"]));
+        assert_eq!(
+            stmt["principal_identifiers"],
+            json!(["lambda.amazonaws.com"])
+        );
     }
 
     #[test]
@@ -969,7 +998,10 @@ mod tests {
 
         // assume_role_policy_documentフィールドが含まれていることを確認
         assert!(roles[0]["assume_role_policy_document"].is_string());
-        assert!(roles[0]["assume_role_policy_document"].as_str().unwrap().contains("lambda.amazonaws.com"));
+        assert!(roles[0]["assume_role_policy_document"]
+            .as_str()
+            .unwrap()
+            .contains("lambda.amazonaws.com"));
 
         let assume_role_statements = roles[0]["assume_role_statements"].as_array().unwrap();
         assert_eq!(assume_role_statements.len(), 1);
@@ -985,17 +1017,15 @@ mod tests {
         let decoded_policy = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}"#;
 
         mock_client.expect_list_roles().returning(move || {
-            Ok(vec![
-                IamRoleInfo {
-                    role_name: "lambda-execution-role".to_string(),
-                    role_id: "AROA1234567890".to_string(),
-                    arn: "arn:aws:iam::123456789012:role/lambda-execution-role".to_string(),
-                    create_date: 1609459200,
-                    path: "/service-role/".to_string(),
-                    assume_role_policy_document: Some(encoded_policy.to_string()),
-                    tags: HashMap::new(),
-                },
-            ])
+            Ok(vec![IamRoleInfo {
+                role_name: "lambda-execution-role".to_string(),
+                role_id: "AROA1234567890".to_string(),
+                arn: "arn:aws:iam::123456789012:role/lambda-execution-role".to_string(),
+                create_date: 1609459200,
+                path: "/service-role/".to_string(),
+                assume_role_policy_document: Some(encoded_policy.to_string()),
+                tags: HashMap::new(),
+            }])
         });
 
         let scanner = AwsIamScanner::new_with_client(
@@ -1006,15 +1036,15 @@ mod tests {
         let roles = scanner.scan_roles().await.unwrap();
 
         assert_eq!(roles.len(), 1);
-        
+
         // URLデコードされたポリシードキュメントが保存されていることを確認
         let stored_policy = roles[0]["assume_role_policy_document"].as_str().unwrap();
         assert_eq!(stored_policy, decoded_policy);
-        
+
         // URLエンコードされた文字列が含まれていないことを確認
         assert!(!stored_policy.contains("%7B"));
         assert!(!stored_policy.contains("%22"));
-        
+
         // デコードされたJSONが有効であることを確認
         assert!(serde_json::from_str::<serde_json::Value>(stored_policy).is_ok());
     }
@@ -1028,19 +1058,17 @@ mod tests {
         let mut mock_client = MockIamClient::new();
 
         mock_client.expect_list_policies().returning(|| {
-            Ok(vec![
-                IamPolicyInfo {
-                    policy_name: "CustomS3Policy".to_string(),
-                    policy_id: "ANPA1234567890".to_string(),
-                    arn: "arn:aws:iam::123456789012:policy/CustomS3Policy".to_string(),
-                    path: "/".to_string(),
-                    default_version_id: "v1".to_string(),
-                    attachment_count: 2,
-                    create_date: 1609459200,
-                    update_date: 1609459200,
-                    description: "Custom S3 access policy".to_string(),
-                },
-            ])
+            Ok(vec![IamPolicyInfo {
+                policy_name: "CustomS3Policy".to_string(),
+                policy_id: "ANPA1234567890".to_string(),
+                arn: "arn:aws:iam::123456789012:policy/CustomS3Policy".to_string(),
+                path: "/".to_string(),
+                default_version_id: "v1".to_string(),
+                attachment_count: 2,
+                create_date: 1609459200,
+                update_date: 1609459200,
+                description: "Custom S3 access policy".to_string(),
+            }])
         });
 
         let scanner = AwsIamScanner::new_with_client(
@@ -1064,22 +1092,28 @@ mod tests {
         let mut mock_client = MockIamClient::new();
 
         // 全ての必要なメソッドにモック設定
-        mock_client.expect_list_users().returning(|| Ok(vec![
-            IamUserInfo {
+        mock_client.expect_list_users().returning(|| {
+            Ok(vec![IamUserInfo {
                 user_name: "user1".to_string(),
                 user_id: "id1".to_string(),
                 arn: "arn1".to_string(),
                 create_date: 0,
                 path: "/".to_string(),
                 tags: HashMap::new(),
-            },
-        ]));
+            }])
+        });
         mock_client.expect_list_groups().returning(|| Ok(vec![]));
         mock_client.expect_list_roles().returning(|| Ok(vec![]));
         mock_client.expect_list_policies().returning(|| Ok(vec![]));
-        mock_client.expect_list_user_policies().returning(|_| Ok(vec![]));
-        mock_client.expect_list_attached_user_policies().returning(|_| Ok(vec![]));
-        mock_client.expect_list_groups_for_user().returning(|_| Ok(vec![]));
+        mock_client
+            .expect_list_user_policies()
+            .returning(|_| Ok(vec![]));
+        mock_client
+            .expect_list_attached_user_policies()
+            .returning(|_| Ok(vec![]));
+        mock_client
+            .expect_list_groups_for_user()
+            .returning(|_| Ok(vec![]));
 
         let mut scan_targets = HashMap::new();
         scan_targets.insert("users".to_string(), true);
@@ -1092,9 +1126,10 @@ mod tests {
         let progress_values = Arc::new(std::sync::Mutex::new(Vec::new()));
         let progress_clone = progress_values.clone();
 
-        let callback: Box<dyn Fn(u32, String) + Send + Sync> = Box::new(move |progress, message| {
-            progress_clone.lock().unwrap().push((progress, message));
-        });
+        let callback: Box<dyn Fn(u32, String) + Send + Sync> =
+            Box::new(move |progress, message| {
+                progress_clone.lock().unwrap().push((progress, message));
+            });
 
         let result = scanner.scan(callback).await.unwrap();
 
@@ -1117,7 +1152,9 @@ mod tests {
         let mut mock_client = MockIamClient::new();
 
         mock_client.expect_list_users().returning(|| {
-            Err(anyhow::anyhow!("Authentication failed: invalid credentials"))
+            Err(anyhow::anyhow!(
+                "Authentication failed: invalid credentials"
+            ))
         });
 
         let scanner = AwsIamScanner::new_with_client(
@@ -1137,7 +1174,9 @@ mod tests {
         let mut mock_client = MockIamClient::new();
 
         mock_client.expect_list_users().returning(|| {
-            Err(anyhow::anyhow!("Access Denied: iam:ListUsers permission required"))
+            Err(anyhow::anyhow!(
+                "Access Denied: iam:ListUsers permission required"
+            ))
         });
 
         let mut scan_targets = HashMap::new();

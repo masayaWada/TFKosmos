@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::infra::query::{Lexer, QueryEvaluator, QueryParser};
 use crate::models::ResourceListResponse;
 use crate::services::scan_service::ScanService;
-use crate::infra::query::{Lexer, QueryParser, QueryEvaluator};
 
 // In-memory storage for resource selections (in production, use Redis or database)
 type ResourceSelections = Arc<RwLock<HashMap<String, HashMap<String, Vec<Value>>>>>;
@@ -92,11 +92,13 @@ impl ResourceService {
     ) -> Result<ResourceListResponse> {
         // Parse query
         let mut lexer = Lexer::new(query);
-        let tokens = lexer.tokenize()
+        let tokens = lexer
+            .tokenize()
             .map_err(|e| anyhow::anyhow!("クエリ構文エラー: {}", e))?;
 
         let mut parser = QueryParser::new(tokens);
-        let expr = parser.parse()
+        let expr = parser
+            .parse()
             .map_err(|e| anyhow::anyhow!("クエリパースエラー: {}", e))?;
 
         // Get scan data
@@ -167,15 +169,17 @@ impl ResourceService {
         selections: HashMap<String, Vec<Value>>,
     ) -> Result<Value> {
         let mut storage = RESOURCE_SELECTIONS.write().await;
-        let scan_selections = storage.entry(scan_id.to_string()).or_insert_with(HashMap::new);
-        
+        let scan_selections = storage
+            .entry(scan_id.to_string())
+            .or_insert_with(HashMap::new);
+
         // Merge new selections with existing ones
         for (resource_type, ids) in selections {
             scan_selections.insert(resource_type, ids);
         }
-        
+
         let total_count: usize = scan_selections.values().map(|v| v.len()).sum();
-        
+
         Ok(json!({
             "success": true,
             "selected_count": total_count
@@ -202,9 +206,7 @@ impl ResourceService {
             // Filter resources that match the search term in any field
             let filtered: Vec<Value> = resources
                 .into_iter()
-                .filter(|resource| {
-                    Self::resource_matches_search(resource, &term)
-                })
+                .filter(|resource| Self::resource_matches_search(resource, &term))
                 .collect();
 
             Ok(filtered)
@@ -370,7 +372,8 @@ mod tests {
     #[test]
     fn test_resource_matches_search_array_field() {
         // Arrange
-        let resource = test_helpers::create_group_resource("TestGroup", vec!["user1", "user2", "admin"]);
+        let resource =
+            test_helpers::create_group_resource("TestGroup", vec!["user1", "user2", "admin"]);
 
         // Act & Assert
         assert!(

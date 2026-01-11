@@ -99,9 +99,7 @@ async fn generate_terraform(
     }
 }
 
-async fn download_generated_files(
-    Path(generation_id): Path<String>,
-) -> Result<Response, ApiError> {
+async fn download_generated_files(Path(generation_id): Path<String>) -> Result<Response, ApiError> {
     let cache_entry = GENERATION_CACHE.read().await.get(&generation_id).cloned();
 
     let entry = cache_entry.ok_or_else(|| {
@@ -140,9 +138,7 @@ async fn check_terraform() -> Result<Json<Value>, ApiError> {
     })))
 }
 
-async fn validate_generation(
-    Path(generation_id): Path<String>,
-) -> Result<Json<Value>, ApiError> {
+async fn validate_generation(Path(generation_id): Path<String>) -> Result<Json<Value>, ApiError> {
     ValidationService::validate_generation(&generation_id)
         .await
         .map(|result| {
@@ -205,8 +201,7 @@ mod tests {
 
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            200,
+            status_u16, 200,
             "check_terraform endpoint should always return OK (200), got {}",
             status_u16
         );
@@ -299,8 +294,7 @@ mod tests {
 
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            404,
+            status_u16, 404,
             "Expected NOT_FOUND (404) for non-existent generation_id, got {}",
             status_u16
         );
@@ -381,4 +375,3 @@ mod tests {
         );
     }
 }
-

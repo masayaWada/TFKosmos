@@ -107,7 +107,9 @@ impl<'a> Lexer<'a> {
                     Err("Unexpected character '=' (did you mean '=='?)".to_string())
                 }
             }
-            _ if ch.is_ascii_digit() || (ch == '-' && self.peek_char().map_or(false, |c| c.is_ascii_digit())) => {
+            _ if ch.is_ascii_digit()
+                || (ch == '-' && self.peek_char().map_or(false, |c| c.is_ascii_digit())) =>
+            {
                 self.read_number()
             }
             _ if ch.is_alphabetic() || ch == '_' => self.read_identifier(),
@@ -185,12 +187,15 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
 
-        while self.pos < self.chars.len() && (self.current_char().is_ascii_digit() || self.current_char() == '.') {
+        while self.pos < self.chars.len()
+            && (self.current_char().is_ascii_digit() || self.current_char() == '.')
+        {
             num_str.push(self.current_char());
             self.advance();
         }
 
-        num_str.parse::<f64>()
+        num_str
+            .parse::<f64>()
             .map(|n| Some(Token::Number(n)))
             .map_err(|_| format!("Invalid number: {}", num_str))
     }
@@ -198,7 +203,9 @@ impl<'a> Lexer<'a> {
     fn read_identifier(&mut self) -> Result<Option<Token>, String> {
         let mut ident = String::new();
 
-        while self.pos < self.chars.len() && (self.current_char().is_alphanumeric() || self.current_char() == '_') {
+        while self.pos < self.chars.len()
+            && (self.current_char().is_alphanumeric() || self.current_char() == '_')
+        {
             ident.push(self.current_char());
             self.advance();
         }

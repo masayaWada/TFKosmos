@@ -27,7 +27,12 @@ impl RealIamClient {
 impl IamClientOps for RealIamClient {
     async fn list_users(&self) -> Result<Vec<IamUserInfo>> {
         let mut users = Vec::new();
-        let mut paginator = self.client.list_users().into_paginator().page_size(100).send();
+        let mut paginator = self
+            .client
+            .list_users()
+            .into_paginator()
+            .page_size(100)
+            .send();
 
         while let Some(page_result) = paginator.next().await {
             let page = page_result.map_err(|e| anyhow!("Failed to list users: {}", e))?;
@@ -93,7 +98,12 @@ impl IamClientOps for RealIamClient {
 
     async fn list_roles(&self) -> Result<Vec<IamRoleInfo>> {
         let mut roles = Vec::new();
-        let mut paginator = self.client.list_roles().into_paginator().page_size(100).send();
+        let mut paginator = self
+            .client
+            .list_roles()
+            .into_paginator()
+            .page_size(100)
+            .send();
 
         while let Some(page_result) = paginator.next().await {
             let page = page_result.map_err(|e| anyhow!("Failed to list roles: {}", e))?;

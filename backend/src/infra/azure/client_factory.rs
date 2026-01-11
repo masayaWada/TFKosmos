@@ -36,13 +36,7 @@ impl AzureClientFactory {
         _service_principal_config: Option<HashMap<String, String>>,
     ) -> Result<ConnectionTestResponse> {
         // Azure CLIで現在のアカウント情報を取得
-        let json = Self::execute_az_command(&[
-            "account",
-            "show",
-            "--output",
-            "json",
-        ])
-        .await?;
+        let json = Self::execute_az_command(&["account", "show", "--output", "json"]).await?;
 
         let subscription_id = json
             .get("id")

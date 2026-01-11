@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
-use crate::infra::terraform::{TerraformCli, FormatResult, ValidationResult, TerraformVersion};
+use crate::infra::terraform::{FormatResult, TerraformCli, TerraformVersion, ValidationResult};
 use crate::services::generation_service::GENERATION_CACHE;
 
 pub struct ValidationService;
@@ -18,11 +18,7 @@ impl ValidationService {
     /// 生成されたTerraformコードを検証
     pub async fn validate_generation(generation_id: &str) -> Result<ValidationResult> {
         // Get output path from cache to prevent path traversal attacks
-        let cache_entry = GENERATION_CACHE
-            .read()
-            .await
-            .get(generation_id)
-            .cloned();
+        let cache_entry = GENERATION_CACHE.read().await.get(generation_id).cloned();
 
         let entry = cache_entry.ok_or_else(|| {
             anyhow::anyhow!(
@@ -50,11 +46,7 @@ impl ValidationService {
     /// フォーマットチェック
     pub async fn check_format(generation_id: &str) -> Result<FormatResult> {
         // Get output path from cache to prevent path traversal attacks
-        let cache_entry = GENERATION_CACHE
-            .read()
-            .await
-            .get(generation_id)
-            .cloned();
+        let cache_entry = GENERATION_CACHE.read().await.get(generation_id).cloned();
 
         let entry = cache_entry.ok_or_else(|| {
             anyhow::anyhow!(
@@ -78,11 +70,7 @@ impl ValidationService {
     /// 自動フォーマット
     pub async fn format_code(generation_id: &str) -> Result<Vec<String>> {
         // Get output path from cache to prevent path traversal attacks
-        let cache_entry = GENERATION_CACHE
-            .read()
-            .await
-            .get(generation_id)
-            .cloned();
+        let cache_entry = GENERATION_CACHE.read().await.get(generation_id).cloned();
 
         let entry = cache_entry.ok_or_else(|| {
             anyhow::anyhow!(
@@ -124,7 +112,7 @@ mod tests {
         let test_dir = "./terraform-output/test-validation";
         if std::path::Path::new(test_dir).exists() {
             // キャッシュにエントリを追加
-            use crate::services::generation_service::{GENERATION_CACHE, GenerationCacheEntry};
+            use crate::services::generation_service::{GenerationCacheEntry, GENERATION_CACHE};
             GENERATION_CACHE.write().await.insert(
                 "test-validation".to_string(),
                 GenerationCacheEntry {
@@ -160,7 +148,7 @@ mod tests {
         let test_dir = "./terraform-output/test-validation";
         if std::path::Path::new(test_dir).exists() {
             // キャッシュにエントリを追加
-            use crate::services::generation_service::{GENERATION_CACHE, GenerationCacheEntry};
+            use crate::services::generation_service::{GenerationCacheEntry, GENERATION_CACHE};
             GENERATION_CACHE.write().await.insert(
                 "test-validation".to_string(),
                 GenerationCacheEntry {
@@ -174,7 +162,10 @@ mod tests {
             let format_result = result.unwrap();
             // フォーマットされているはず
             assert!(format_result.formatted);
-            println!("Format check successful: formatted = {}", format_result.formatted);
+            println!(
+                "Format check successful: formatted = {}",
+                format_result.formatted
+            );
 
             // クリーンアップ
             GENERATION_CACHE.write().await.remove("test-validation");
@@ -201,7 +192,7 @@ value = "test"
         file.write_all(unformatted.as_bytes()).unwrap();
 
         // キャッシュにエントリを追加
-        use crate::services::generation_service::{GENERATION_CACHE, GenerationCacheEntry};
+        use crate::services::generation_service::{GenerationCacheEntry, GENERATION_CACHE};
         GENERATION_CACHE.write().await.insert(
             test_id.clone(),
             GenerationCacheEntry {

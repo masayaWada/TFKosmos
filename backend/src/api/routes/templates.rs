@@ -43,9 +43,7 @@ async fn get_template(
     TemplateService::get_template(&template_name, params.source.as_deref())
         .await
         .map(Json)
-        .map_err(|e| {
-            ApiError::NotFound(format!("Template '{}' not found: {}", template_name, e))
-        })
+        .map_err(|e| ApiError::NotFound(format!("Template '{}' not found: {}", template_name, e)))
 }
 
 #[derive(serde::Deserialize)]
@@ -136,8 +134,9 @@ mod tests {
         fs::create_dir_all(&default_template_dir).unwrap();
         fs::write(
             default_template_dir.join("iam_user.tf.j2"),
-            "default template"
-        ).unwrap();
+            "default template",
+        )
+        .unwrap();
 
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
@@ -151,13 +150,15 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            200,
+            status_u16, 200,
             "List templates endpoint should return OK (200), got {}",
             status_u16
         );
         let body: serde_json::Value = response.json();
-        assert!(body.get("templates").is_some(), "Response should have templates field");
+        assert!(
+            body.get("templates").is_some(),
+            "Response should have templates field"
+        );
         let templates = body.get("templates").unwrap().as_array().unwrap();
         assert!(!templates.is_empty(), "Should have at least one template");
 
@@ -191,8 +192,7 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            200,
+            status_u16, 200,
             "Get template endpoint should return OK (200), got {}",
             status_u16
         );
@@ -231,8 +231,7 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            404,
+            status_u16, 404,
             "Get template endpoint should return NOT_FOUND (404), got {}",
             status_u16
         );
@@ -269,8 +268,7 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            200,
+            status_u16, 200,
             "Create template endpoint should return OK (200), got {}",
             status_u16
         );
@@ -284,7 +282,10 @@ mod tests {
         let template_path = user_template_dir.join(template_name);
         assert!(template_path.exists(), "Template file should exist");
         let saved_content = fs::read_to_string(&template_path).unwrap();
-        assert_eq!(saved_content, template_content, "Saved content should match");
+        assert_eq!(
+            saved_content, template_content,
+            "Saved content should match"
+        );
 
         // 元のディレクトリに戻す
         std::env::set_current_dir(original_dir).unwrap();
@@ -320,12 +321,11 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            200,
+            status_u16, 200,
             "Update template endpoint should return OK (200), got {}",
             status_u16
         );
-        
+
         // テンプレートファイルが更新されたことを確認
         let template_path = user_template_dir.join(template_name);
         let saved_content = fs::read_to_string(&template_path).unwrap();
@@ -361,8 +361,7 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            200,
+            status_u16, 200,
             "Delete template endpoint should return OK (200), got {}",
             status_u16
         );
@@ -398,8 +397,7 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            500,
+            status_u16, 500,
             "Delete template endpoint should return INTERNAL_SERVER_ERROR (500), got {}",
             status_u16
         );
@@ -437,16 +435,24 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            200,
+            status_u16, 200,
             "Preview template endpoint should return OK (200), got {}",
             status_u16
         );
         let body: serde_json::Value = response.json();
-        assert!(body.get("preview").is_some(), "Response should have preview field");
+        assert!(
+            body.get("preview").is_some(),
+            "Response should have preview field"
+        );
         let preview = body.get("preview").unwrap().as_str().unwrap();
-        assert!(preview.contains("test_user"), "Preview should contain resource_name");
-        assert!(preview.contains("test-user"), "Preview should contain user_name");
+        assert!(
+            preview.contains("test_user"),
+            "Preview should contain resource_name"
+        );
+        assert!(
+            preview.contains("test-user"),
+            "Preview should contain user_name"
+        );
     }
 
     #[tokio::test]
@@ -472,8 +478,7 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            200,
+            status_u16, 200,
             "Validate template endpoint should return OK (200), got {}",
             status_u16
         );
@@ -499,7 +504,7 @@ mod tests {
         let template_name = "iam_user.tf.j2";
         let template_content = r#"resource "aws_iam_user" "{{ resource_name" {
   name = "{{ user.user_name }}"
-}"#;  // 閉じ括弧がない
+}"#; // 閉じ括弧がない
 
         // Act
         let encoded_name = urlencoding::encode(template_name);
@@ -513,8 +518,7 @@ mod tests {
         // Assert
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            200,
+            status_u16, 200,
             "Validate template endpoint should return OK (200), got {}",
             status_u16
         );

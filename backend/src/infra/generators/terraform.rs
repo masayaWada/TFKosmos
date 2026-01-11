@@ -37,14 +37,18 @@ impl TerraformGenerator {
 
         // Define resource templates based on provider
         let templates = Self::get_templates_for_provider(provider);
-        println!("[GENERATE] Found {} templates for provider {}", templates.len(), provider);
+        println!(
+            "[GENERATE] Found {} templates for provider {}",
+            templates.len(),
+            provider
+        );
 
         let mut generated_files = Vec::new();
 
         // Process each resource type
         for template_info in templates {
             let resource_type = template_info.resource_type;
-            
+
             // Get resources from scan data
             let resources = scan_data
                 .get(resource_type)
@@ -52,25 +56,43 @@ impl TerraformGenerator {
                 .cloned()
                 .unwrap_or_default();
 
-            println!("[GENERATE] Resource type '{}': found {} resources", resource_type, resources.len());
+            println!(
+                "[GENERATE] Resource type '{}': found {} resources",
+                resource_type,
+                resources.len()
+            );
 
             if resources.is_empty() {
-                println!("[GENERATE] Skipping resource type '{}' (no resources)", resource_type);
+                println!(
+                    "[GENERATE] Skipping resource type '{}' (no resources)",
+                    resource_type
+                );
                 continue;
             }
 
             // Filter by selected resources if provided
             // If selected_resources is empty or doesn't contain this resource type, use all resources
             let resources_to_process = if selected_resources.is_empty() {
-                println!("[GENERATE] No selection filter provided, using all {} resources for type '{}'", resources.len(), resource_type);
+                println!(
+                    "[GENERATE] No selection filter provided, using all {} resources for type '{}'",
+                    resources.len(),
+                    resource_type
+                );
                 resources
             } else if let Some(selected) = selected_resources.get(resource_type) {
-                println!("[GENERATE] Filtering resources for type '{}': {} selected", resource_type, selected.len());
+                println!(
+                    "[GENERATE] Filtering resources for type '{}': {} selected",
+                    resource_type,
+                    selected.len()
+                );
                 if selected.is_empty() {
-                    println!("[GENERATE] Skipping resource type '{}' (empty selection)", resource_type);
+                    println!(
+                        "[GENERATE] Skipping resource type '{}' (empty selection)",
+                        resource_type
+                    );
                     continue; // Skip if empty selection
                 }
-                
+
                 // Extract selected IDs (handle both string IDs and object IDs)
                 let selected_ids: Vec<String> = selected
                     .iter()
@@ -92,9 +114,13 @@ impl TerraformGenerator {
                         }
                     })
                     .collect();
-                
-                println!("[GENERATE] Extracted {} selected IDs: {:?}", selected_ids.len(), selected_ids);
-                
+
+                println!(
+                    "[GENERATE] Extracted {} selected IDs: {:?}",
+                    selected_ids.len(),
+                    selected_ids
+                );
+
                 // Filter resources that match selected IDs
                 let filtered: Vec<_> = resources
                     .iter()
@@ -104,15 +130,17 @@ impl TerraformGenerator {
                             "users" => r.get("user_name").and_then(|v| v.as_str()),
                             "groups" => r.get("group_name").and_then(|v| v.as_str()),
                             "roles" => r.get("role_name").and_then(|v| v.as_str()),
-                            "policies" => r.get("arn")
+                            "policies" => r
+                                .get("arn")
                                 .or_else(|| r.get("policy_name"))
                                 .and_then(|v| v.as_str()),
-                            _ => r.get("arn")
+                            _ => r
+                                .get("arn")
                                 .or_else(|| r.get("id"))
                                 .or_else(|| r.get("name"))
                                 .and_then(|v| v.as_str()),
                         };
-                        
+
                         if let Some(id) = resource_id {
                             let matches = selected_ids.contains(&id.to_string());
                             if matches {
@@ -125,24 +153,42 @@ impl TerraformGenerator {
                     })
                     .cloned()
                     .collect();
-                println!("[GENERATE] Filtered to {} resources for type '{}'", filtered.len(), resource_type);
+                println!(
+                    "[GENERATE] Filtered to {} resources for type '{}'",
+                    filtered.len(),
+                    resource_type
+                );
                 filtered
             } else {
-                println!("[GENERATE] No selection filter for type '{}', using all {} resources", resource_type, resources.len());
+                println!(
+                    "[GENERATE] No selection filter for type '{}', using all {} resources",
+                    resource_type,
+                    resources.len()
+                );
                 resources
             };
 
             if resources_to_process.is_empty() {
-                println!("[GENERATE] Skipping resource type '{}' (no resources to process)", resource_type);
+                println!(
+                    "[GENERATE] Skipping resource type '{}' (no resources to process)",
+                    resource_type
+                );
                 continue;
             }
 
-            println!("[GENERATE] Processing {} resources for type '{}'", resources_to_process.len(), resource_type);
+            println!(
+                "[GENERATE] Processing {} resources for type '{}'",
+                resources_to_process.len(),
+                resource_type
+            );
 
             // Generate files based on file split rule
             match config.file_split_rule.as_str() {
                 "single" => {
-                    println!("[GENERATE] Generating single file for type '{}'", resource_type);
+                    println!(
+                        "[GENERATE] Generating single file for type '{}'",
+                        resource_type
+                    );
                     let file_path = Self::generate_single_file(
                         &resources_to_process,
                         &template_info,
@@ -150,12 +196,20 @@ impl TerraformGenerator {
                         output_path,
                     )
                     .await
-                    .with_context(|| format!("Failed to generate single file for type '{}'", resource_type))?;
+                    .with_context(|| {
+                        format!(
+                            "Failed to generate single file for type '{}'",
+                            resource_type
+                        )
+                    })?;
                     println!("[GENERATE] Generated file: {}", file_path);
                     generated_files.push(file_path);
                 }
                 "by_resource_type" => {
-                    println!("[GENERATE] Generating file by resource type for type '{}'", resource_type);
+                    println!(
+                        "[GENERATE] Generating file by resource type for type '{}'",
+                        resource_type
+                    );
                     let file_path = Self::generate_by_resource_type(
                         &resources_to_process,
                         &template_info,
@@ -163,12 +217,20 @@ impl TerraformGenerator {
                         output_path,
                     )
                     .await
-                    .with_context(|| format!("Failed to generate file by resource type for type '{}'", resource_type))?;
+                    .with_context(|| {
+                        format!(
+                            "Failed to generate file by resource type for type '{}'",
+                            resource_type
+                        )
+                    })?;
                     println!("[GENERATE] Generated file: {}", file_path);
                     generated_files.push(file_path);
                 }
                 "by_resource_name" => {
-                    println!("[GENERATE] Generating files by resource name for type '{}'", resource_type);
+                    println!(
+                        "[GENERATE] Generating files by resource name for type '{}'",
+                        resource_type
+                    );
                     let files = Self::generate_by_resource_name(
                         &resources_to_process,
                         &template_info,
@@ -176,13 +238,25 @@ impl TerraformGenerator {
                         output_path,
                     )
                     .await
-                    .with_context(|| format!("Failed to generate files by resource name for type '{}'", resource_type))?;
-                    println!("[GENERATE] Generated {} files for type '{}'", files.len(), resource_type);
+                    .with_context(|| {
+                        format!(
+                            "Failed to generate files by resource name for type '{}'",
+                            resource_type
+                        )
+                    })?;
+                    println!(
+                        "[GENERATE] Generated {} files for type '{}'",
+                        files.len(),
+                        resource_type
+                    );
                     generated_files.extend(files);
                 }
                 _ => {
                     // Default to single file
-                    println!("[GENERATE] Unknown file split rule '{}', defaulting to single file", config.file_split_rule);
+                    println!(
+                        "[GENERATE] Unknown file split rule '{}', defaulting to single file",
+                        config.file_split_rule
+                    );
                     let file_path = Self::generate_single_file(
                         &resources_to_process,
                         &template_info,
@@ -190,7 +264,12 @@ impl TerraformGenerator {
                         output_path,
                     )
                     .await
-                    .with_context(|| format!("Failed to generate single file for type '{}'", resource_type))?;
+                    .with_context(|| {
+                        format!(
+                            "Failed to generate single file for type '{}'",
+                            resource_type
+                        )
+                    })?;
                     println!("[GENERATE] Generated file: {}", file_path);
                     generated_files.push(file_path);
                 }
@@ -207,7 +286,10 @@ impl TerraformGenerator {
             generated_files.push(readme_path);
         }
 
-        println!("[GENERATE] Generation complete. Generated {} files", generated_files.len());
+        println!(
+            "[GENERATE] Generation complete. Generated {} files",
+            generated_files.len()
+        );
         if generated_files.is_empty() {
             return Err(anyhow::anyhow!(
                 "No files were generated. This may be because:\n\
@@ -267,31 +349,52 @@ impl TerraformGenerator {
         config: &GenerationConfig,
         output_path: &PathBuf,
     ) -> Result<String> {
-        println!("[GENERATE] Generating single file for {} resources", resources.len());
+        println!(
+            "[GENERATE] Generating single file for {} resources",
+            resources.len()
+        );
         let mut content = String::new();
 
         for (idx, resource) in resources.iter().enumerate() {
-            println!("[GENERATE] Rendering resource {} of {}", idx + 1, resources.len());
+            println!(
+                "[GENERATE] Rendering resource {} of {}",
+                idx + 1,
+                resources.len()
+            );
             let rendered = Self::render_resource(resource, template_info, config)
                 .await
-                .with_context(|| format!("Failed to render resource {} of type '{}'", idx + 1, template_info.resource_type))?;
+                .with_context(|| {
+                    format!(
+                        "Failed to render resource {} of type '{}'",
+                        idx + 1,
+                        template_info.resource_type
+                    )
+                })?;
             content.push_str(&rendered);
             content.push_str("\n\n");
         }
 
         let file_name = format!("{}.tf", template_info.resource_type);
         let file_path = output_path.join(&file_name);
-        
-        println!("[GENERATE] Writing file: {:?} ({} bytes)", file_path, content.len());
+
+        println!(
+            "[GENERATE] Writing file: {:?} ({} bytes)",
+            file_path,
+            content.len()
+        );
         fs::write(&file_path, content)
             .with_context(|| format!("Failed to write file: {:?}", file_path))?;
-        
+
         // Verify file was written
         if !file_path.exists() {
             return Err(anyhow::anyhow!("File was not created: {:?}", file_path));
         }
         let metadata = fs::metadata(&file_path)?;
-        println!("[GENERATE] File written successfully: {:?} ({} bytes)", file_path, metadata.len());
+        println!(
+            "[GENERATE] File written successfully: {:?} ({} bytes)",
+            file_path,
+            metadata.len()
+        );
 
         Ok(file_name)
     }
@@ -316,7 +419,7 @@ impl TerraformGenerator {
 
         for resource in resources {
             let rendered = Self::render_resource(resource, template_info, config).await?;
-            
+
             // Get resource name for file name
             let resource_name = Self::get_resource_name(resource, template_info.resource_type)?;
             let file_name = format!(
@@ -325,7 +428,7 @@ impl TerraformGenerator {
                 NamingGenerator::apply_naming_convention(&resource_name, &config.naming_convention)
             );
             let file_path = output_path.join(&file_name);
-            
+
             fs::write(&file_path, rendered)
                 .with_context(|| format!("Failed to write file: {:?}", file_path))?;
 
@@ -342,15 +445,16 @@ impl TerraformGenerator {
     ) -> Result<String> {
         // Get resource name for Terraform resource identifier
         let resource_name = Self::get_resource_name(resource, template_info.resource_type)?;
-        let terraform_resource_name = NamingGenerator::apply_naming_convention(
-            &resource_name,
-            &config.naming_convention,
-        );
+        let terraform_resource_name =
+            NamingGenerator::apply_naming_convention(&resource_name, &config.naming_convention);
 
         // Prepare context for template
         let mut context = serde_json::Map::new();
-        context.insert("resource_name".to_string(), Value::String(terraform_resource_name));
-        
+        context.insert(
+            "resource_name".to_string(),
+            Value::String(terraform_resource_name),
+        );
+
         // Add resource data based on resource type
         match template_info.resource_type {
             "users" => {
@@ -372,13 +476,22 @@ impl TerraformGenerator {
         }
 
         let context_value = Value::Object(context);
-        
+
         // Render template
-        println!("[GENERATE] Rendering template: {}", template_info.template_path);
-        let rendered = TemplateManager::render_template(template_info.template_path, &context_value)
-            .await
-            .with_context(|| format!("Failed to render template: {}", template_info.template_path))?;
-        println!("[GENERATE] Template rendered successfully ({} bytes)", rendered.len());
+        println!(
+            "[GENERATE] Rendering template: {}",
+            template_info.template_path
+        );
+        let rendered =
+            TemplateManager::render_template(template_info.template_path, &context_value)
+                .await
+                .with_context(|| {
+                    format!("Failed to render template: {}", template_info.template_path)
+                })?;
+        println!(
+            "[GENERATE] Template rendered successfully ({} bytes)",
+            rendered.len()
+        );
         Ok(rendered)
     }
 
@@ -426,18 +539,20 @@ impl TerraformGenerator {
         readme.push_str("# Terraform Code Generation\n\n");
         readme.push_str("This directory contains Terraform code generated by TFKosmos.\n\n");
         readme.push_str("## Generated Files\n\n");
-        
+
         for file in files {
             readme.push_str(&format!("- {}\n", file));
         }
-        
+
         readme.push_str("\n## Usage\n\n");
         readme.push_str("1. Review the generated Terraform files\n");
         readme.push_str("2. Run `terraform init` to initialize the Terraform working directory\n");
         readme.push_str("3. Run `terraform plan` to review the changes\n");
         readme.push_str("4. Run `terraform apply` to apply the changes\n\n");
         readme.push_str("## Import Script\n\n");
-        readme.push_str("Use the generated import script to import existing resources into Terraform state.\n");
+        readme.push_str(
+            "Use the generated import script to import existing resources into Terraform state.\n",
+        );
 
         let readme_path = output_path.join("README.md");
         fs::write(&readme_path, readme)
@@ -463,7 +578,7 @@ impl TerraformGenerator {
         let templates = Self::get_templates_for_provider(provider);
         for template_info in templates {
             let resource_type = template_info.resource_type;
-            
+
             let resources = scan_data
                 .get(resource_type)
                 .and_then(|v| v.as_array())
@@ -480,12 +595,19 @@ impl TerraformGenerator {
                 println!("[GENERATE_IMPORT] No selection filter provided, using all {} resources for type '{}'", resources.len(), resource_type);
                 resources
             } else if let Some(selected) = selected_resources.get(resource_type) {
-                println!("[GENERATE_IMPORT] Filtering resources for type '{}': {} selected", resource_type, selected.len());
+                println!(
+                    "[GENERATE_IMPORT] Filtering resources for type '{}': {} selected",
+                    resource_type,
+                    selected.len()
+                );
                 if selected.is_empty() {
-                    println!("[GENERATE_IMPORT] Skipping resource type '{}' (empty selection)", resource_type);
+                    println!(
+                        "[GENERATE_IMPORT] Skipping resource type '{}' (empty selection)",
+                        resource_type
+                    );
                     continue;
                 }
-                
+
                 // Extract selected IDs (handle both string IDs and object IDs)
                 let selected_ids: Vec<String> = selected
                     .iter()
@@ -507,9 +629,13 @@ impl TerraformGenerator {
                         }
                     })
                     .collect();
-                
-                println!("[GENERATE_IMPORT] Extracted {} selected IDs: {:?}", selected_ids.len(), selected_ids);
-                
+
+                println!(
+                    "[GENERATE_IMPORT] Extracted {} selected IDs: {:?}",
+                    selected_ids.len(),
+                    selected_ids
+                );
+
                 // Filter resources that match selected IDs
                 let filtered: Vec<_> = resources
                     .iter()
@@ -519,15 +645,17 @@ impl TerraformGenerator {
                             "users" => r.get("user_name").and_then(|v| v.as_str()),
                             "groups" => r.get("group_name").and_then(|v| v.as_str()),
                             "roles" => r.get("role_name").and_then(|v| v.as_str()),
-                            "policies" => r.get("arn")
+                            "policies" => r
+                                .get("arn")
                                 .or_else(|| r.get("policy_name"))
                                 .and_then(|v| v.as_str()),
-                            _ => r.get("arn")
+                            _ => r
+                                .get("arn")
                                 .or_else(|| r.get("id"))
                                 .or_else(|| r.get("name"))
                                 .and_then(|v| v.as_str()),
                         };
-                        
+
                         if let Some(id) = resource_id {
                             selected_ids.contains(&id.to_string())
                         } else {
@@ -536,15 +664,27 @@ impl TerraformGenerator {
                     })
                     .cloned()
                     .collect();
-                
-                println!("[GENERATE_IMPORT] Filtered to {} resources for type '{}'", filtered.len(), resource_type);
+
+                println!(
+                    "[GENERATE_IMPORT] Filtered to {} resources for type '{}'",
+                    filtered.len(),
+                    resource_type
+                );
                 filtered
             } else {
-                println!("[GENERATE_IMPORT] No selection filter for type '{}', using all {} resources", resource_type, resources.len());
+                println!(
+                    "[GENERATE_IMPORT] No selection filter for type '{}', using all {} resources",
+                    resource_type,
+                    resources.len()
+                );
                 resources
             };
 
-            println!("[GENERATE_IMPORT] Processing {} resources for type '{}'", resources_to_process.len(), resource_type);
+            println!(
+                "[GENERATE_IMPORT] Processing {} resources for type '{}'",
+                resources_to_process.len(),
+                resource_type
+            );
             for resource in resources_to_process {
                 match Self::generate_import_command(&resource, resource_type, provider) {
                     Ok(import_cmd) => {
@@ -552,13 +692,19 @@ impl TerraformGenerator {
                         import_commands.push(import_cmd);
                     }
                     Err(e) => {
-                        eprintln!("[GENERATE_IMPORT] Failed to generate import command for resource: {}", e);
+                        eprintln!(
+                            "[GENERATE_IMPORT] Failed to generate import command for resource: {}",
+                            e
+                        );
                     }
                 }
             }
         }
 
-        println!("[GENERATE_IMPORT] Total import commands generated: {}", import_commands.len());
+        println!(
+            "[GENERATE_IMPORT] Total import commands generated: {}",
+            import_commands.len()
+        );
         if import_commands.is_empty() {
             println!("[GENERATE_IMPORT] No import commands generated, returning None");
             return Ok(None);
@@ -577,16 +723,27 @@ impl TerraformGenerator {
         };
 
         let script_path = output_path.join(script_name);
-        println!("[GENERATE_IMPORT] Writing import script: {:?} ({} bytes)", script_path, script_content.len());
+        println!(
+            "[GENERATE_IMPORT] Writing import script: {:?} ({} bytes)",
+            script_path,
+            script_content.len()
+        );
         fs::write(&script_path, script_content)
             .with_context(|| format!("Failed to write import script: {:?}", script_path))?;
-        
+
         // Verify file was written
         if !script_path.exists() {
-            return Err(anyhow::anyhow!("Import script was not created: {:?}", script_path));
+            return Err(anyhow::anyhow!(
+                "Import script was not created: {:?}",
+                script_path
+            ));
         }
         let metadata = fs::metadata(&script_path)?;
-        println!("[GENERATE_IMPORT] Import script written successfully: {:?} ({} bytes)", script_path, metadata.len());
+        println!(
+            "[GENERATE_IMPORT] Import script written successfully: {:?} ({} bytes)",
+            script_path,
+            metadata.len()
+        );
 
         // Make script executable on Unix systems
         #[cfg(unix)]
@@ -601,7 +758,11 @@ impl TerraformGenerator {
         Ok(Some(script_name.to_string()))
     }
 
-    fn generate_import_command(resource: &Value, resource_type: &str, provider: &str) -> Result<String> {
+    fn generate_import_command(
+        resource: &Value,
+        resource_type: &str,
+        provider: &str,
+    ) -> Result<String> {
         let resource_name = Self::get_resource_name(resource, resource_type)?;
         let terraform_resource_name = NamingGenerator::to_snake_case(&resource_name);
 
@@ -646,7 +807,9 @@ impl TerraformGenerator {
                     terraform_resource_name, arn
                 ))
             }
-            _ => Err(anyhow::anyhow!("Unsupported provider/resource type combination")),
+            _ => Err(anyhow::anyhow!(
+                "Unsupported provider/resource type combination"
+            )),
         }
     }
 
@@ -656,11 +819,11 @@ impl TerraformGenerator {
         script.push_str("# Terraform import script\n");
         script.push_str("# Generated by TFKosmos\n\n");
         script.push_str("set -e\n\n");
-        
+
         for cmd in commands {
             script.push_str(&format!("{}\n", cmd));
         }
-        
+
         script
     }
 
@@ -669,11 +832,11 @@ impl TerraformGenerator {
         script.push_str("# Terraform import script\n");
         script.push_str("# Generated by TFKosmos\n\n");
         script.push_str("$ErrorActionPreference = \"Stop\"\n\n");
-        
+
         for cmd in commands {
             script.push_str(&format!("{}\n", cmd));
         }
-        
+
         script
     }
 }
@@ -777,7 +940,10 @@ mod tests {
 
         let result = TerraformGenerator::get_resource_name(&resource, "users");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing user_name"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing user_name"));
     }
 
     #[test]
@@ -935,7 +1101,8 @@ mod tests {
 
         let files = vec!["users.tf".to_string(), "groups.tf".to_string()];
 
-        let result = TerraformGenerator::generate_readme(&config, &output_path.to_path_buf(), &files).await;
+        let result =
+            TerraformGenerator::generate_readme(&config, &output_path.to_path_buf(), &files).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "README.md");

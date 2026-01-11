@@ -155,17 +155,23 @@ impl ScanService {
                         if let Some(policies) = data.get("policies").and_then(|v| v.as_array()) {
                             summary.insert("policies".to_string(), policies.len());
                         }
-                        if let Some(attachments) = data.get("attachments").and_then(|v| v.as_array()) {
+                        if let Some(attachments) =
+                            data.get("attachments").and_then(|v| v.as_array())
+                        {
                             summary.insert("attachments".to_string(), attachments.len());
                         }
                         if let Some(cleanup) = data.get("cleanup").and_then(|v| v.as_array()) {
                             summary.insert("cleanup".to_string(), cleanup.len());
                         }
                     } else if provider == "azure" {
-                        if let Some(role_definitions) = data.get("role_definitions").and_then(|v| v.as_array()) {
+                        if let Some(role_definitions) =
+                            data.get("role_definitions").and_then(|v| v.as_array())
+                        {
                             summary.insert("role_definitions".to_string(), role_definitions.len());
                         }
-                        if let Some(role_assignments) = data.get("role_assignments").and_then(|v| v.as_array()) {
+                        if let Some(role_assignments) =
+                            data.get("role_assignments").and_then(|v| v.as_array())
+                        {
                             summary.insert("role_assignments".to_string(), role_assignments.len());
                         }
                     }

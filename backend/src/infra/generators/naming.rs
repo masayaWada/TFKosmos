@@ -123,10 +123,7 @@ mod tests {
             let result = NamingGenerator::to_kebab_case(input);
 
             // Assert
-            assert_eq!(
-                result, "my-resource-name",
-                "ドットをハイフンに変換するべき"
-            );
+            assert_eq!(result, "my-resource-name", "ドットをハイフンに変換するべき");
         }
 
         #[test]
@@ -208,7 +205,10 @@ mod tests {
             let result = NamingGenerator::apply_naming_convention(input, convention);
 
             // Assert
-            assert_eq!(result, "My-Name_Test", "original規約では入力をそのまま返すべき");
+            assert_eq!(
+                result, "My-Name_Test",
+                "original規約では入力をそのまま返すべき"
+            );
         }
 
         #[test]
@@ -221,10 +221,7 @@ mod tests {
             let result = NamingGenerator::apply_naming_convention(input, convention);
 
             // Assert
-            assert_eq!(
-                result, "My-Name",
-                "不明な規約では入力をそのまま返すべき"
-            );
+            assert_eq!(result, "My-Name", "不明な規約では入力をそのまま返すべき");
         }
 
         #[test]

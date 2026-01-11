@@ -101,7 +101,10 @@ mod tests {
             Environment::Development,
             "デフォルト環境はDevelopmentであるべき"
         );
-        assert_eq!(config.host, "0.0.0.0", "デフォルトホストは0.0.0.0であるべき");
+        assert_eq!(
+            config.host, "0.0.0.0",
+            "デフォルトホストは0.0.0.0であるべき"
+        );
         assert_eq!(config.port, 8000, "デフォルトポートは8000であるべき");
         assert!(
             config.cors_origins.is_empty(),

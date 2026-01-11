@@ -218,8 +218,7 @@ mod tests {
 
         let status_u16 = response.status_code().as_u16();
         assert_eq!(
-            status_u16,
-            404,
+            status_u16, 404,
             "Expected NOT_FOUND (404) for non-existent scan_id, got {}",
             status_u16
         );
@@ -258,9 +257,7 @@ mod tests {
                 // 少し待ってからステータスを取得
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-                let status_response = server
-                    .get(&format!("/api/scan/{}/status", scan_id))
-                    .await;
+                let status_response = server.get(&format!("/api/scan/{}/status", scan_id)).await;
 
                 let status_u16 = status_response.status_code().as_u16();
                 // スキャンが見つかった場合（200）またはまだ見つからない場合（404）
@@ -285,4 +282,3 @@ mod tests {
         }
     }
 }
-
