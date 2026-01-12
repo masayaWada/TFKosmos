@@ -2,11 +2,11 @@ pub struct NamingGenerator;
 
 impl NamingGenerator {
     pub fn to_snake_case(s: &str) -> String {
-        s.replace('-', "_").replace('.', "_").to_lowercase()
+        s.replace(['-', '.'], "_").to_lowercase()
     }
 
     pub fn to_kebab_case(s: &str) -> String {
-        s.replace('_', "-").replace('.', "-").to_lowercase()
+        s.replace(['_', '.'], "-").to_lowercase()
     }
 
     pub fn apply_naming_convention(s: &str, convention: &str) -> String {

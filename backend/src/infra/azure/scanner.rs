@@ -464,11 +464,11 @@ impl<C: AzureClientOps> AzureIamScanner<C> {
                 ra.get("principalType").and_then(|v| v.as_str()),
             ) {
                 let key = format!("{}:{}", principal_id, principal_type);
-                if !principal_id_to_name.contains_key(&key) {
+                principal_id_to_name.entry(key).or_insert_with(|| {
                     unique_principal_ids
                         .push((principal_id.to_string(), principal_type.to_string()));
-                    principal_id_to_name.insert(key, None);
-                }
+                    None
+                });
             }
         }
         debug!(

@@ -51,7 +51,7 @@ impl QueryEvaluator {
         match (field_value, expected) {
             (JsonValue::String(a), Value::String(b)) => a == b,
             (JsonValue::Number(a), Value::Number(b)) => {
-                a.as_f64().map_or(false, |av| (av - b).abs() < f64::EPSILON)
+                a.as_f64().is_some_and(|av| (av - b).abs() < f64::EPSILON)
             }
             (JsonValue::Bool(a), Value::Boolean(b)) => a == b,
             _ => false,
@@ -92,12 +92,10 @@ impl QueryEvaluator {
                 if text_pos > text.len() - part.len() {
                     return false;
                 }
+            } else if let Some(pos) = text[text_pos..].find(part) {
+                text_pos += pos + part.len();
             } else {
-                if let Some(pos) = text[text_pos..].find(part) {
-                    text_pos += pos + part.len();
-                } else {
-                    return false;
-                }
+                return false;
             }
         }
 

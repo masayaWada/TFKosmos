@@ -58,6 +58,7 @@ pub struct IamPolicyInfo {
 #[derive(Debug, Clone)]
 pub struct PolicyAttachment {
     pub policy_arn: String,
+    #[allow(dead_code)]
     pub policy_name: Option<String>,
 }
 

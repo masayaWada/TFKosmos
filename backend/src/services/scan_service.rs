@@ -139,7 +139,7 @@ impl ScanService {
         let results = SCAN_RESULTS.read().await;
         results.get(scan_id).map(|result| {
             // Calculate summary from scan data
-            let summary = result.data.as_ref().and_then(|data| {
+            let summary = result.data.as_ref().map(|data| {
                 let mut summary = std::collections::HashMap::new();
                 if let Some(provider) = data.get("provider").and_then(|v| v.as_str()) {
                     if provider == "aws" {
@@ -176,7 +176,7 @@ impl ScanService {
                         }
                     }
                 }
-                Some(summary)
+                summary
             });
 
             ScanResponse {

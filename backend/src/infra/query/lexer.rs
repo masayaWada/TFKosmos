@@ -108,7 +108,7 @@ impl<'a> Lexer<'a> {
                 }
             }
             _ if ch.is_ascii_digit()
-                || (ch == '-' && self.peek_char().map_or(false, |c| c.is_ascii_digit())) =>
+                || (ch == '-' && self.peek_char().is_some_and(|c| c.is_ascii_digit())) =>
             {
                 self.read_number()
             }

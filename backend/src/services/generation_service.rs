@@ -17,6 +17,7 @@ pub type GenerationCache = Arc<RwLock<HashMap<String, GenerationCacheEntry>>>;
 #[derive(Clone)]
 pub struct GenerationCacheEntry {
     pub output_path: String,
+    #[allow(dead_code)]
     pub files: Vec<String>,
 }
 
@@ -324,14 +325,12 @@ impl GenerationService {
 
         // Find the byte index of the character at position max_chars
         // This ensures we slice at a character boundary, not in the middle of a multi-byte character
-        let mut char_count = 0;
         let mut byte_index = 0;
-        for (idx, _) in s.char_indices() {
+        for (char_count, (idx, _)) in s.char_indices().enumerate() {
             if char_count >= max_chars {
                 byte_index = idx;
                 break;
             }
-            char_count += 1;
         }
 
         // If we didn't find a break point (shouldn't happen), return the full string

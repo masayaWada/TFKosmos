@@ -23,7 +23,7 @@ impl AwsClientFactory {
             || std::env::var("AWS_SECRET_ACCESS_KEY").is_err()
         {
             let credentials_output = tokio::process::Command::new("aws")
-                .args(&[
+                .args([
                     "configure",
                     "export-credentials",
                     "--profile",

@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::infra::generators::naming::NamingGenerator;
 use crate::infra::templates::manager::TemplateManager;
@@ -347,7 +347,7 @@ impl TerraformGenerator {
         resources: &[Value],
         template_info: &ResourceTemplate,
         config: &GenerationConfig,
-        output_path: &PathBuf,
+        output_path: &Path,
     ) -> Result<String> {
         println!(
             "[GENERATE] Generating single file for {} resources",
@@ -403,7 +403,7 @@ impl TerraformGenerator {
         resources: &[Value],
         template_info: &ResourceTemplate,
         config: &GenerationConfig,
-        output_path: &PathBuf,
+        output_path: &Path,
     ) -> Result<String> {
         // Same as single file for now
         Self::generate_single_file(resources, template_info, config, output_path).await
@@ -413,7 +413,7 @@ impl TerraformGenerator {
         resources: &[Value],
         template_info: &ResourceTemplate,
         config: &GenerationConfig,
-        output_path: &PathBuf,
+        output_path: &Path,
     ) -> Result<Vec<String>> {
         let mut files = Vec::new();
 
@@ -532,7 +532,7 @@ impl TerraformGenerator {
 
     async fn generate_readme(
         _config: &GenerationConfig,
-        output_path: &PathBuf,
+        output_path: &Path,
         files: &[String],
     ) -> Result<String> {
         let mut readme = String::new();
@@ -565,7 +565,7 @@ impl TerraformGenerator {
         scan_data: &Value,
         config: &GenerationConfig,
         selected_resources: &HashMap<String, Vec<Value>>,
-        output_path: &PathBuf,
+        output_path: &Path,
     ) -> Result<Option<String>> {
         let provider = scan_data
             .get("provider")
