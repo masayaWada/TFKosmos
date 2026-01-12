@@ -624,7 +624,9 @@ impl<C: IamClientOps> AwsIamScanner<C> {
 mod tests {
     use super::*;
     use crate::infra::aws::iam_client_trait::mock::MockIamClient;
-    use crate::infra::aws::iam_client_trait::{IamGroupInfo, IamPolicyInfo, IamRoleInfo, IamUserInfo};
+    use crate::infra::aws::iam_client_trait::{
+        IamGroupInfo, IamPolicyInfo, IamRoleInfo, IamUserInfo,
+    };
     use std::collections::HashMap;
 
     fn create_test_config(

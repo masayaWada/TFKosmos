@@ -1101,8 +1101,7 @@ mod tests {
 
         let files = vec!["users.tf".to_string(), "groups.tf".to_string()];
 
-        let result =
-            TerraformGenerator::generate_readme(&config, output_path, &files).await;
+        let result = TerraformGenerator::generate_readme(&config, output_path, &files).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "README.md");
