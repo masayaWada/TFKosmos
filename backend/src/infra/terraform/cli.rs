@@ -264,7 +264,7 @@ resource "null_resource" "test" {
         assert!(result.is_ok());
         let validation_result = result.unwrap();
         assert!(!validation_result.valid);
-        assert!(validation_result.errors.len() > 0);
+        assert!(!validation_result.errors.is_empty());
     }
 
     #[test]

@@ -179,7 +179,6 @@ async fn format_code(Path(generation_id): Path<String>) -> Result<Json<Value>, A
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::StatusCode;
     use axum_test::TestServer;
     use serde_json::json;
     use std::collections::HashMap;

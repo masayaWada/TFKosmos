@@ -1102,7 +1102,7 @@ mod tests {
         let files = vec!["users.tf".to_string(), "groups.tf".to_string()];
 
         let result =
-            TerraformGenerator::generate_readme(&config, &output_path.to_path_buf(), &files).await;
+            TerraformGenerator::generate_readme(&config, output_path, &files).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "README.md");
@@ -1151,7 +1151,7 @@ mod tests {
             &scan_data,
             &config,
             &selected_resources,
-            &output_path.to_path_buf(),
+            output_path,
         )
         .await;
 
@@ -1200,7 +1200,7 @@ mod tests {
             &scan_data,
             &config,
             &selected_resources,
-            &output_path.to_path_buf(),
+            output_path,
         )
         .await;
 
@@ -1243,7 +1243,7 @@ mod tests {
             &scan_data,
             &config,
             &selected_resources,
-            &output_path.to_path_buf(),
+            output_path,
         )
         .await;
 

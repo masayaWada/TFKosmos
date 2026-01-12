@@ -529,7 +529,7 @@ mod tests {
             "Template should be invalid"
         );
         assert!(
-            body.get("errors").and_then(|v| v.as_array()).unwrap().len() > 0,
+            !body.get("errors").and_then(|v| v.as_array()).unwrap().is_empty(),
             "Should have errors"
         );
     }
