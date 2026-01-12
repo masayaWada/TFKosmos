@@ -49,6 +49,7 @@ pub enum ActionList {
 
 impl ActionList {
     /// 常に配列として取得
+    #[allow(dead_code)]
     pub fn as_vec(&self) -> Vec<String> {
         match self {
             ActionList::Single(s) => vec![s.clone()],
@@ -67,6 +68,7 @@ pub enum ResourceList {
 
 impl ResourceList {
     /// 常に配列として取得
+    #[allow(dead_code)]
     pub fn as_vec(&self) -> Vec<String> {
         match self {
             ResourceList::Single(s) => vec![s.clone()],
@@ -77,6 +79,7 @@ impl ResourceList {
 
 impl IamPolicyDocument {
     /// JSON文字列からパース
+    #[allow(dead_code)]
     pub fn from_json_str(json_str: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json_str)
     }

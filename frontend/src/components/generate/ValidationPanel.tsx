@@ -30,7 +30,7 @@ export default function ValidationPanel({ generationId }: Props) {
     try {
       const status = await generateApi.checkTerraform();
       setTerraformStatus(status);
-    } catch (err) {
+    } catch {
       setTerraformStatus({ available: false, version: "" });
     } finally {
       setIsLoadingTerraform(false);
