@@ -26,6 +26,11 @@ impl RealIamClient {
 #[async_trait]
 impl IamClientOps for RealIamClient {
     async fn list_users(&self) -> Result<Vec<IamUserInfo>> {
+        // デフォルトはタグ情報を取得
+        self.list_users_with_options(true).await
+    }
+
+    async fn list_users_with_options(&self, include_tags: bool) -> Result<Vec<IamUserInfo>> {
         let mut users = Vec::new();
         let mut paginator = self
             .client
@@ -40,20 +45,24 @@ impl IamClientOps for RealIamClient {
             for user in page.users() {
                 let user_name = user.user_name().to_string();
 
-                // タグを取得
-                let tags = match self
-                    .client
-                    .list_user_tags()
-                    .user_name(&user_name)
-                    .send()
-                    .await
-                {
-                    Ok(tags_result) => tags_result
-                        .tags()
-                        .iter()
-                        .map(|tag| (tag.key().to_string(), tag.value().to_string()))
-                        .collect(),
-                    Err(_) => HashMap::new(),
+                // タグを取得（include_tagsがtrueの場合のみ）
+                let tags = if include_tags {
+                    match self
+                        .client
+                        .list_user_tags()
+                        .user_name(&user_name)
+                        .send()
+                        .await
+                    {
+                        Ok(tags_result) => tags_result
+                            .tags()
+                            .iter()
+                            .map(|tag| (tag.key().to_string(), tag.value().to_string()))
+                            .collect(),
+                        Err(_) => HashMap::new(),
+                    }
+                } else {
+                    HashMap::new()
                 };
 
                 users.push(IamUserInfo {
@@ -97,6 +106,11 @@ impl IamClientOps for RealIamClient {
     }
 
     async fn list_roles(&self) -> Result<Vec<IamRoleInfo>> {
+        // デフォルトはタグ情報を取得
+        self.list_roles_with_options(true).await
+    }
+
+    async fn list_roles_with_options(&self, include_tags: bool) -> Result<Vec<IamRoleInfo>> {
         let mut roles = Vec::new();
         let mut paginator = self
             .client
@@ -111,20 +125,24 @@ impl IamClientOps for RealIamClient {
             for role in page.roles() {
                 let role_name = role.role_name().to_string();
 
-                // タグを取得
-                let tags = match self
-                    .client
-                    .list_role_tags()
-                    .role_name(&role_name)
-                    .send()
-                    .await
-                {
-                    Ok(tags_result) => tags_result
-                        .tags()
-                        .iter()
-                        .map(|tag| (tag.key().to_string(), tag.value().to_string()))
-                        .collect(),
-                    Err(_) => HashMap::new(),
+                // タグを取得（include_tagsがtrueの場合のみ）
+                let tags = if include_tags {
+                    match self
+                        .client
+                        .list_role_tags()
+                        .role_name(&role_name)
+                        .send()
+                        .await
+                    {
+                        Ok(tags_result) => tags_result
+                            .tags()
+                            .iter()
+                            .map(|tag| (tag.key().to_string(), tag.value().to_string()))
+                            .collect(),
+                        Err(_) => HashMap::new(),
+                    }
+                } else {
+                    HashMap::new()
                 };
 
                 roles.push(IamRoleInfo {

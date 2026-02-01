@@ -1,18 +1,27 @@
 use axum::{
     extract::Path,
-    response::Json,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Json,
+    },
     routing::{get, post},
     Router,
 };
+use futures::stream::Stream;
 use serde_json::{json, Value};
+use std::convert::Infallible;
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::StreamExt;
 
 use crate::api::error::ApiError;
-use crate::services::scan_service::ScanService;
+use crate::services::scan_service::{ScanProgressEvent, ScanService};
 
 pub fn router() -> Router {
     Router::new()
         .route("/aws", post(scan_aws))
         .route("/azure", post(scan_azure))
+        .route("/aws/stream", post(scan_aws_stream))
+        .route("/azure/stream", post(scan_azure_stream))
         .route("/:scan_id/status", get(get_scan_status))
 }
 
@@ -51,6 +60,62 @@ async fn scan_azure(Json(request): Json<ScanRequest>) -> Result<Json<Value>, Api
             message: e.to_string(),
         }),
     }
+}
+
+/// AWSスキャンをSSEストリーミングで実行
+///
+/// スキャンの進捗をServer-Sent Eventsでリアルタイムに送信します。
+/// イベントタイプ:
+/// - `progress`: スキャン進捗の更新
+/// - `resource`: リソーススキャン完了（件数付き）
+/// - `completed`: スキャン完了（全データ付き）
+/// - `error`: エラー発生
+async fn scan_aws_stream(
+    Json(request): Json<ScanRequest>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let mut config = request.config;
+    config.provider = "aws".to_string();
+
+    match ScanService::start_scan_stream(config).await {
+        Ok(rx) => {
+            let stream = create_sse_stream(rx);
+            Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+        }
+        Err(e) => Err(ApiError::ExternalService {
+            service: "AWS".to_string(),
+            message: e.to_string(),
+        }),
+    }
+}
+
+/// AzureスキャンをSSEストリーミングで実行
+async fn scan_azure_stream(
+    Json(request): Json<ScanRequest>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let mut config = request.config;
+    config.provider = "azure".to_string();
+
+    match ScanService::start_scan_stream(config).await {
+        Ok(rx) => {
+            let stream = create_sse_stream(rx);
+            Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+        }
+        Err(e) => Err(ApiError::ExternalService {
+            service: "Azure".to_string(),
+            message: e.to_string(),
+        }),
+    }
+}
+
+/// ReceiverStreamからSSEイベントストリームを作成
+fn create_sse_stream(
+    rx: tokio::sync::mpsc::Receiver<ScanProgressEvent>,
+) -> impl Stream<Item = Result<Event, Infallible>> {
+    ReceiverStream::new(rx).map(|event| {
+        let event_type = event.event_type.clone();
+        let json_data = serde_json::to_string(&event).unwrap_or_else(|_| "{}".to_string());
+        Ok(Event::default().event(event_type).data(json_data))
+    })
 }
 
 async fn get_scan_status(Path(scan_id): Path<String>) -> Result<Json<Value>, ApiError> {

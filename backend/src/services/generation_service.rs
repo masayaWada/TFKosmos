@@ -569,6 +569,7 @@ mod tests {
             scope_value: None,
             scan_targets: HashMap::new(),
             filters: HashMap::new(),
+            include_tags: true,
         };
 
         // スキャン結果を登録
@@ -642,6 +643,7 @@ mod tests {
             scope_value: None,
             scan_targets: HashMap::new(),
             filters: HashMap::new(),
+            include_tags: true,
         };
 
         ScanService::insert_test_scan_data(scan_id.to_string(), config, scan_data).await;
@@ -687,6 +689,7 @@ mod tests {
             scope_value: None,
             scan_targets: HashMap::new(),
             filters: HashMap::new(),
+            include_tags: true,
         };
 
         ScanService::insert_test_scan_data(scan_id.to_string(), config, scan_data).await;
@@ -737,6 +740,7 @@ mod tests {
             scope_value: None,
             scan_targets: HashMap::new(),
             filters: HashMap::new(),
+            include_tags: true,
         };
 
         ScanService::insert_test_scan_data(scan_id.to_string(), config, scan_data).await;
@@ -784,6 +788,7 @@ mod tests {
             scope_value: None,
             scan_targets: HashMap::new(),
             filters: HashMap::new(),
+            include_tags: true,
         };
 
         ScanService::insert_test_scan_data(scan_id.to_string(), config, scan_data).await;

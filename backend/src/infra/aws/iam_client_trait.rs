@@ -74,14 +74,34 @@ pub struct PolicyDocument {
 /// テスト用のモッククライアントを切り替えることができます。
 #[async_trait]
 pub trait IamClientOps: Send + Sync {
-    /// IAMユーザー一覧を取得
+    /// IAMユーザー一覧を取得（タグ情報付き）
+    ///
+    /// これは `list_users_with_options(true)` のエイリアスです。
+    /// テストや互換性のために維持されています。
+    #[allow(dead_code)]
     async fn list_users(&self) -> Result<Vec<IamUserInfo>>;
+
+    /// IAMユーザー一覧を取得（オプション付き）
+    ///
+    /// # Arguments
+    /// * `include_tags` - タグ情報を取得するかどうか。falseの場合、tagsは空のHashMapになる
+    async fn list_users_with_options(&self, include_tags: bool) -> Result<Vec<IamUserInfo>>;
 
     /// IAMグループ一覧を取得
     async fn list_groups(&self) -> Result<Vec<IamGroupInfo>>;
 
-    /// IAMロール一覧を取得
+    /// IAMロール一覧を取得（タグ情報付き）
+    ///
+    /// これは `list_roles_with_options(true)` のエイリアスです。
+    /// テストや互換性のために維持されています。
+    #[allow(dead_code)]
     async fn list_roles(&self) -> Result<Vec<IamRoleInfo>>;
+
+    /// IAMロール一覧を取得（オプション付き）
+    ///
+    /// # Arguments
+    /// * `include_tags` - タグ情報を取得するかどうか。falseの場合、tagsは空のHashMapになる
+    async fn list_roles_with_options(&self, include_tags: bool) -> Result<Vec<IamRoleInfo>>;
 
     /// IAMポリシー一覧を取得（ローカルスコープのみ）
     async fn list_policies(&self) -> Result<Vec<IamPolicyInfo>>;
@@ -127,8 +147,10 @@ pub mod mock {
         #[async_trait]
         impl IamClientOps for IamClient {
             async fn list_users(&self) -> Result<Vec<IamUserInfo>>;
+            async fn list_users_with_options(&self, include_tags: bool) -> Result<Vec<IamUserInfo>>;
             async fn list_groups(&self) -> Result<Vec<IamGroupInfo>>;
             async fn list_roles(&self) -> Result<Vec<IamRoleInfo>>;
+            async fn list_roles_with_options(&self, include_tags: bool) -> Result<Vec<IamRoleInfo>>;
             async fn list_policies(&self) -> Result<Vec<IamPolicyInfo>>;
             async fn list_user_policies(&self, user_name: &str) -> Result<Vec<String>>;
             async fn list_attached_user_policies(&self, user_name: &str) -> Result<Vec<PolicyAttachment>>;

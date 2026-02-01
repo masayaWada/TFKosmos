@@ -776,6 +776,7 @@ mod tests {
             scope_value: None,
             scan_targets,
             filters: HashMap::new(),
+            include_tags: true,
         }
     }
 

@@ -80,7 +80,7 @@ impl<C: IamClientOps> AwsIamScanner<C> {
         let mut completed_targets = 0;
 
         // Users
-        if scan_targets.get("users").copied().unwrap_or(false) {
+        let users = if scan_targets.get("users").copied().unwrap_or(false) {
             debug!("IAM Usersのスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
@@ -88,19 +88,21 @@ impl<C: IamClientOps> AwsIamScanner<C> {
             );
             let users = self.scan_users().await?;
             let count = users.len();
-            results.insert("users".to_string(), Value::Array(users));
+            results.insert("users".to_string(), Value::Array(users.clone()));
             completed_targets += 1;
             debug!(count, "IAM Usersのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 format!("IAM Usersのスキャン完了: {}件", count),
             );
+            users
         } else {
             results.insert("users".to_string(), Value::Array(Vec::new()));
-        }
+            Vec::new()
+        };
 
         // Groups
-        if scan_targets.get("groups").copied().unwrap_or(false) {
+        let groups = if scan_targets.get("groups").copied().unwrap_or(false) {
             debug!("IAM Groupsのスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
@@ -108,19 +110,21 @@ impl<C: IamClientOps> AwsIamScanner<C> {
             );
             let groups = self.scan_groups().await?;
             let count = groups.len();
-            results.insert("groups".to_string(), Value::Array(groups));
+            results.insert("groups".to_string(), Value::Array(groups.clone()));
             completed_targets += 1;
             debug!(count, "IAM Groupsのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 format!("IAM Groupsのスキャン完了: {}件", count),
             );
+            groups
         } else {
             results.insert("groups".to_string(), Value::Array(Vec::new()));
-        }
+            Vec::new()
+        };
 
         // Roles
-        if scan_targets.get("roles").copied().unwrap_or(false) {
+        let roles = if scan_targets.get("roles").copied().unwrap_or(false) {
             debug!("IAM Rolesのスキャンを開始");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
@@ -128,16 +132,18 @@ impl<C: IamClientOps> AwsIamScanner<C> {
             );
             let roles = self.scan_roles().await?;
             let count = roles.len();
-            results.insert("roles".to_string(), Value::Array(roles));
+            results.insert("roles".to_string(), Value::Array(roles.clone()));
             completed_targets += 1;
             debug!(count, "IAM Rolesのスキャン完了");
             progress_callback(
                 (completed_targets * 100 / total_targets) as u32,
                 format!("IAM Rolesのスキャン完了: {}件", count),
             );
+            roles
         } else {
             results.insert("roles".to_string(), Value::Array(Vec::new()));
-        }
+            Vec::new()
+        };
 
         // Policies
         if scan_targets.get("policies").copied().unwrap_or(false) {
@@ -159,8 +165,10 @@ impl<C: IamClientOps> AwsIamScanner<C> {
             results.insert("policies".to_string(), Value::Array(Vec::new()));
         }
 
-        // リソース間の接続情報を取得
-        let attachments = self.scan_attachments().await?;
+        // リソース間の接続情報を取得（既にスキャン済みのデータを再利用）
+        let attachments = self
+            .scan_attachments_with_data(&users, &groups, &roles)
+            .await?;
         results.insert("attachments".to_string(), attachments);
 
         // クリーンアップ（マネージドポリシーのバージョン等を補完）
@@ -187,7 +195,10 @@ impl<C: IamClientOps> AwsIamScanner<C> {
 
     /// IAMユーザーをスキャン
     pub async fn scan_users(&self) -> Result<Vec<Value>> {
-        let users_info = self.iam_client.list_users().await?;
+        let users_info = self
+            .iam_client
+            .list_users_with_options(self.config.include_tags)
+            .await?;
         let mut users = Vec::new();
 
         for user in users_info {
@@ -239,7 +250,10 @@ impl<C: IamClientOps> AwsIamScanner<C> {
 
     /// IAMロールをスキャン
     pub async fn scan_roles(&self) -> Result<Vec<Value>> {
-        let roles_info = self.iam_client.list_roles().await?;
+        let roles_info = self
+            .iam_client
+            .list_roles_with_options(self.config.include_tags)
+            .await?;
         let mut roles = Vec::new();
 
         for role in roles_info {
@@ -313,44 +327,60 @@ impl<C: IamClientOps> AwsIamScanner<C> {
         Ok(policies)
     }
 
-    /// リソース間の接続情報をスキャン
-    async fn scan_attachments(&self) -> Result<Value> {
+    /// 既にスキャン済みのデータを使用してリソース間の接続情報をスキャン
+    ///
+    /// この関数は、scan_users, scan_groups, scan_rolesで取得済みのデータを再利用し、
+    /// 重複するAPI呼び出しを削減します。
+    async fn scan_attachments_with_data(
+        &self,
+        users: &[Value],
+        groups: &[Value],
+        roles: &[Value],
+    ) -> Result<Value> {
         let mut attachments = serde_json::Map::new();
+
+        // ユーザー名を抽出
+        let user_names: Vec<&str> = users
+            .iter()
+            .filter_map(|u| u.get("user_name").and_then(|v| v.as_str()))
+            .collect();
+
+        // グループ名を抽出
+        let group_names: Vec<&str> = groups
+            .iter()
+            .filter_map(|g| g.get("group_name").and_then(|v| v.as_str()))
+            .collect();
+
+        // ロール名を抽出
+        let role_names: Vec<&str> = roles
+            .iter()
+            .filter_map(|r| r.get("role_name").and_then(|v| v.as_str()))
+            .collect();
 
         // UserとPolicyの接続
         let mut user_policies = Vec::new();
-        if let Ok(users_info) = self.iam_client.list_users().await {
-            for user in users_info {
-                if !self.apply_name_prefix_filter(&user.user_name) {
-                    continue;
+        for user_name in &user_names {
+            // インラインポリシーを取得
+            if let Ok(inline_policies) = self.iam_client.list_user_policies(user_name).await {
+                for policy_name in inline_policies {
+                    user_policies.push(json!({
+                        "user_name": user_name,
+                        "policy_name": policy_name,
+                        "policy_type": "inline",
+                    }));
                 }
+            }
 
-                // インラインポリシーを取得
-                if let Ok(inline_policies) =
-                    self.iam_client.list_user_policies(&user.user_name).await
-                {
-                    for policy_name in inline_policies {
-                        user_policies.push(json!({
-                            "user_name": user.user_name,
-                            "policy_name": policy_name,
-                            "policy_type": "inline",
-                        }));
-                    }
-                }
-
-                // アタッチされたマネージドポリシーを取得
-                if let Ok(attached_policies) = self
-                    .iam_client
-                    .list_attached_user_policies(&user.user_name)
-                    .await
-                {
-                    for policy in attached_policies {
-                        user_policies.push(json!({
-                            "user_name": user.user_name,
-                            "policy_arn": policy.policy_arn,
-                            "policy_type": "managed",
-                        }));
-                    }
+            // アタッチされたマネージドポリシーを取得
+            if let Ok(attached_policies) =
+                self.iam_client.list_attached_user_policies(user_name).await
+            {
+                for policy in attached_policies {
+                    user_policies.push(json!({
+                        "user_name": user_name,
+                        "policy_arn": policy.policy_arn,
+                        "policy_type": "managed",
+                    }));
                 }
             }
         }
@@ -358,38 +388,30 @@ impl<C: IamClientOps> AwsIamScanner<C> {
 
         // GroupとPolicyの接続
         let mut group_policies = Vec::new();
-        if let Ok(groups_info) = self.iam_client.list_groups().await {
-            for group in groups_info {
-                if !self.apply_name_prefix_filter(&group.group_name) {
-                    continue;
+        for group_name in &group_names {
+            // インラインポリシーを取得
+            if let Ok(inline_policies) = self.iam_client.list_group_policies(group_name).await {
+                for policy_name in inline_policies {
+                    group_policies.push(json!({
+                        "group_name": group_name,
+                        "policy_name": policy_name,
+                        "policy_type": "inline",
+                    }));
                 }
+            }
 
-                // インラインポリシーを取得
-                if let Ok(inline_policies) =
-                    self.iam_client.list_group_policies(&group.group_name).await
-                {
-                    for policy_name in inline_policies {
-                        group_policies.push(json!({
-                            "group_name": group.group_name,
-                            "policy_name": policy_name,
-                            "policy_type": "inline",
-                        }));
-                    }
-                }
-
-                // アタッチされたマネージドポリシーを取得
-                if let Ok(attached_policies) = self
-                    .iam_client
-                    .list_attached_group_policies(&group.group_name)
-                    .await
-                {
-                    for policy in attached_policies {
-                        group_policies.push(json!({
-                            "group_name": group.group_name,
-                            "policy_arn": policy.policy_arn,
-                            "policy_type": "managed",
-                        }));
-                    }
+            // アタッチされたマネージドポリシーを取得
+            if let Ok(attached_policies) = self
+                .iam_client
+                .list_attached_group_policies(group_name)
+                .await
+            {
+                for policy in attached_policies {
+                    group_policies.push(json!({
+                        "group_name": group_name,
+                        "policy_arn": policy.policy_arn,
+                        "policy_type": "managed",
+                    }));
                 }
             }
         }
@@ -397,38 +419,28 @@ impl<C: IamClientOps> AwsIamScanner<C> {
 
         // RoleとPolicyの接続
         let mut role_policies = Vec::new();
-        if let Ok(roles_info) = self.iam_client.list_roles().await {
-            for role in roles_info {
-                if !self.apply_name_prefix_filter(&role.role_name) {
-                    continue;
+        for role_name in &role_names {
+            // インラインポリシーを取得
+            if let Ok(inline_policies) = self.iam_client.list_role_policies(role_name).await {
+                for policy_name in inline_policies {
+                    role_policies.push(json!({
+                        "role_name": role_name,
+                        "policy_name": policy_name,
+                        "policy_type": "inline",
+                    }));
                 }
+            }
 
-                // インラインポリシーを取得
-                if let Ok(inline_policies) =
-                    self.iam_client.list_role_policies(&role.role_name).await
-                {
-                    for policy_name in inline_policies {
-                        role_policies.push(json!({
-                            "role_name": role.role_name,
-                            "policy_name": policy_name,
-                            "policy_type": "inline",
-                        }));
-                    }
-                }
-
-                // アタッチされたマネージドポリシーを取得
-                if let Ok(attached_policies) = self
-                    .iam_client
-                    .list_attached_role_policies(&role.role_name)
-                    .await
-                {
-                    for policy in attached_policies {
-                        role_policies.push(json!({
-                            "role_name": role.role_name,
-                            "policy_arn": policy.policy_arn,
-                            "policy_type": "managed",
-                        }));
-                    }
+            // アタッチされたマネージドポリシーを取得
+            if let Ok(attached_policies) =
+                self.iam_client.list_attached_role_policies(role_name).await
+            {
+                for policy in attached_policies {
+                    role_policies.push(json!({
+                        "role_name": role_name,
+                        "policy_arn": policy.policy_arn,
+                        "policy_type": "managed",
+                    }));
                 }
             }
         }
@@ -436,19 +448,13 @@ impl<C: IamClientOps> AwsIamScanner<C> {
 
         // UserとGroupの接続
         let mut user_groups = Vec::new();
-        if let Ok(users_info) = self.iam_client.list_users().await {
-            for user in users_info {
-                if !self.apply_name_prefix_filter(&user.user_name) {
-                    continue;
-                }
-
-                if let Ok(groups) = self.iam_client.list_groups_for_user(&user.user_name).await {
-                    for group_name in groups {
-                        user_groups.push(json!({
-                            "user_name": user.user_name,
-                            "group_name": group_name,
-                        }));
-                    }
+        for user_name in &user_names {
+            if let Ok(groups) = self.iam_client.list_groups_for_user(user_name).await {
+                for group_name in groups {
+                    user_groups.push(json!({
+                        "user_name": user_name,
+                        "group_name": group_name,
+                    }));
                 }
             }
         }
@@ -647,6 +653,7 @@ mod tests {
             scope_value: None,
             scan_targets,
             filters,
+            include_tags: true,
         }
     }
 
@@ -873,7 +880,7 @@ mod tests {
     async fn test_scan_users_returns_filtered_users() {
         let mut mock_client = MockIamClient::new();
 
-        mock_client.expect_list_users().returning(|| {
+        mock_client.expect_list_users_with_options().returning(|_| {
             Ok(vec![
                 IamUserInfo {
                     user_name: "test-user-1".to_string(),
@@ -971,7 +978,7 @@ mod tests {
     async fn test_scan_roles_with_assume_role_policy() {
         let mut mock_client = MockIamClient::new();
 
-        mock_client.expect_list_roles().returning(|| {
+        mock_client.expect_list_roles_with_options().returning(|_| {
             Ok(vec![
                 IamRoleInfo {
                     role_name: "lambda-execution-role".to_string(),
@@ -1015,17 +1022,19 @@ mod tests {
         let encoded_policy = "%7B%22Version%22%3A%222012-10-17%22%2C%22Statement%22%3A%5B%7B%22Effect%22%3A%22Allow%22%2C%22Principal%22%3A%7B%22Service%22%3A%22lambda.amazonaws.com%22%7D%2C%22Action%22%3A%22sts%3AAssumeRole%22%7D%5D%7D";
         let decoded_policy = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}"#;
 
-        mock_client.expect_list_roles().returning(move || {
-            Ok(vec![IamRoleInfo {
-                role_name: "lambda-execution-role".to_string(),
-                role_id: "AROA1234567890".to_string(),
-                arn: "arn:aws:iam::123456789012:role/lambda-execution-role".to_string(),
-                create_date: 1609459200,
-                path: "/service-role/".to_string(),
-                assume_role_policy_document: Some(encoded_policy.to_string()),
-                tags: HashMap::new(),
-            }])
-        });
+        mock_client
+            .expect_list_roles_with_options()
+            .returning(move |_| {
+                Ok(vec![IamRoleInfo {
+                    role_name: "lambda-execution-role".to_string(),
+                    role_id: "AROA1234567890".to_string(),
+                    arn: "arn:aws:iam::123456789012:role/lambda-execution-role".to_string(),
+                    create_date: 1609459200,
+                    path: "/service-role/".to_string(),
+                    assume_role_policy_document: Some(encoded_policy.to_string()),
+                    tags: HashMap::new(),
+                }])
+            });
 
         let scanner = AwsIamScanner::new_with_client(
             create_test_config(HashMap::new(), HashMap::new()),
@@ -1091,7 +1100,7 @@ mod tests {
         let mut mock_client = MockIamClient::new();
 
         // 全ての必要なメソッドにモック設定
-        mock_client.expect_list_users().returning(|| {
+        mock_client.expect_list_users_with_options().returning(|_| {
             Ok(vec![IamUserInfo {
                 user_name: "user1".to_string(),
                 user_id: "id1".to_string(),
@@ -1102,7 +1111,9 @@ mod tests {
             }])
         });
         mock_client.expect_list_groups().returning(|| Ok(vec![]));
-        mock_client.expect_list_roles().returning(|| Ok(vec![]));
+        mock_client
+            .expect_list_roles_with_options()
+            .returning(|_| Ok(vec![]));
         mock_client.expect_list_policies().returning(|| Ok(vec![]));
         mock_client
             .expect_list_user_policies()
@@ -1150,7 +1161,7 @@ mod tests {
     async fn test_scan_users_error_handling() {
         let mut mock_client = MockIamClient::new();
 
-        mock_client.expect_list_users().returning(|| {
+        mock_client.expect_list_users_with_options().returning(|_| {
             Err(anyhow::anyhow!(
                 "Authentication failed: invalid credentials"
             ))
@@ -1172,7 +1183,7 @@ mod tests {
     async fn test_scan_with_permission_denied() {
         let mut mock_client = MockIamClient::new();
 
-        mock_client.expect_list_users().returning(|| {
+        mock_client.expect_list_users_with_options().returning(|_| {
             Err(anyhow::anyhow!(
                 "Access Denied: iam:ListUsers permission required"
             ))

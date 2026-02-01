@@ -1,11 +1,27 @@
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
 use crate::infra::aws::scanner::AwsIamScanner;
 use crate::infra::azure::scanner::AzureIamScanner;
 use crate::models::{ScanConfig, ScanResponse};
+
+/// ストリーミングスキャンの進捗イベント
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanProgressEvent {
+    pub scan_id: String,
+    pub event_type: String, // "progress", "resource", "completed", "error"
+    pub progress: u32,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
+}
 
 // In-memory storage for scan results (in production, use Redis or database)
 type ScanResults = Arc<RwLock<std::collections::HashMap<String, ScanResult>>>;
@@ -133,6 +149,229 @@ impl ScanService {
         });
 
         Ok(scan_id)
+    }
+
+    /// ストリーミングスキャンを開始し、進捗イベントをチャネル経由で送信する
+    ///
+    /// この関数は従来の`start_scan`とは異なり、進捗イベントをリアルタイムで
+    /// チャネル経由で送信します。SSEエンドポイントで使用されます。
+    pub async fn start_scan_stream(
+        config: ScanConfig,
+    ) -> Result<mpsc::Receiver<ScanProgressEvent>> {
+        let scan_id = Uuid::new_v4().to_string();
+        let (tx, rx) = mpsc::channel::<ScanProgressEvent>(100);
+
+        // Store initial scan state
+        let scan_result = ScanResult {
+            scan_id: scan_id.clone(),
+            status: "in_progress".to_string(),
+            progress: Some(0),
+            message: Some("スキャンを開始しています...".to_string()),
+            _config: config.clone(),
+            data: None,
+        };
+
+        SCAN_RESULTS
+            .write()
+            .await
+            .insert(scan_id.clone(), scan_result);
+
+        // 初期イベントを送信
+        let _ = tx
+            .send(ScanProgressEvent {
+                scan_id: scan_id.clone(),
+                event_type: "progress".to_string(),
+                progress: 0,
+                message: "スキャンを開始しています...".to_string(),
+                resource_type: None,
+                resource_count: None,
+                data: None,
+            })
+            .await;
+
+        // Start scan in background task
+        let scan_id_clone = scan_id.clone();
+        let tx_clone = tx.clone();
+        tokio::spawn(async move {
+            let result = match config.provider.as_str() {
+                "aws" => Self::run_aws_scan_stream(&config, &scan_id_clone, tx_clone.clone()).await,
+                "azure" => {
+                    Self::run_azure_scan_stream(&config, &scan_id_clone, tx_clone.clone()).await
+                }
+                _ => Err(anyhow::anyhow!("Unknown provider")),
+            };
+
+            match result {
+                Ok(data) => match serde_json::to_value(data) {
+                    Ok(json_data) => {
+                        let mut results = SCAN_RESULTS.write().await;
+                        if let Some(scan_result) = results.get_mut(&scan_id_clone) {
+                            scan_result.status = "completed".to_string();
+                            scan_result.progress = Some(100);
+                            scan_result.message = Some("スキャンが完了しました".to_string());
+                            scan_result.data = Some(json_data.clone());
+                        }
+
+                        // 完了イベントを送信
+                        let _ = tx_clone
+                            .send(ScanProgressEvent {
+                                scan_id: scan_id_clone.clone(),
+                                event_type: "completed".to_string(),
+                                progress: 100,
+                                message: "スキャンが完了しました".to_string(),
+                                resource_type: None,
+                                resource_count: None,
+                                data: Some(json_data),
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        let error_msg =
+                            format!("スキャンデータのシリアライズに失敗しました: {}", e);
+                        let mut results = SCAN_RESULTS.write().await;
+                        if let Some(scan_result) = results.get_mut(&scan_id_clone) {
+                            scan_result.status = "failed".to_string();
+                            scan_result.message = Some(error_msg.clone());
+                        }
+                        let _ = tx_clone
+                            .send(ScanProgressEvent {
+                                scan_id: scan_id_clone,
+                                event_type: "error".to_string(),
+                                progress: 0,
+                                message: error_msg,
+                                resource_type: None,
+                                resource_count: None,
+                                data: None,
+                            })
+                            .await;
+                    }
+                },
+                Err(e) => {
+                    let error_msg = format!("スキャンに失敗しました: {}", e);
+                    let mut results = SCAN_RESULTS.write().await;
+                    if let Some(scan_result) = results.get_mut(&scan_id_clone) {
+                        scan_result.status = "failed".to_string();
+                        scan_result.message = Some(error_msg.clone());
+                    }
+                    let _ = tx_clone
+                        .send(ScanProgressEvent {
+                            scan_id: scan_id_clone,
+                            event_type: "error".to_string(),
+                            progress: 0,
+                            message: error_msg,
+                            resource_type: None,
+                            resource_count: None,
+                            data: None,
+                        })
+                        .await;
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+
+    /// AWSスキャンをストリーミングモードで実行
+    async fn run_aws_scan_stream(
+        config: &ScanConfig,
+        scan_id: &str,
+        tx: mpsc::Sender<ScanProgressEvent>,
+    ) -> Result<serde_json::Value> {
+        let scanner = AwsIamScanner::new(config.clone()).await?;
+
+        let scan_id_for_callback = scan_id.to_string();
+        let tx_for_callback = tx.clone();
+        let progress_callback = Box::new(move |progress: u32, message: String| {
+            let scan_id = scan_id_for_callback.clone();
+            let tx = tx_for_callback.clone();
+
+            // リソースタイプと件数をメッセージから抽出
+            let (resource_type, resource_count) = Self::parse_progress_message(&message);
+
+            tokio::spawn(async move {
+                ScanService::update_progress(&scan_id, progress, message.clone()).await;
+                let _ = tx
+                    .send(ScanProgressEvent {
+                        scan_id,
+                        event_type: if resource_count.is_some() {
+                            "resource".to_string()
+                        } else {
+                            "progress".to_string()
+                        },
+                        progress,
+                        message,
+                        resource_type,
+                        resource_count,
+                        data: None,
+                    })
+                    .await;
+            });
+        });
+
+        scanner.scan(progress_callback).await
+    }
+
+    /// Azureスキャンをストリーミングモードで実行
+    async fn run_azure_scan_stream(
+        config: &ScanConfig,
+        scan_id: &str,
+        tx: mpsc::Sender<ScanProgressEvent>,
+    ) -> Result<serde_json::Value> {
+        let scanner = AzureIamScanner::new(config.clone()).await?;
+
+        let scan_id_for_callback = scan_id.to_string();
+        let tx_for_callback = tx.clone();
+        let progress_callback = Box::new(move |progress: u32, message: String| {
+            let scan_id = scan_id_for_callback.clone();
+            let tx = tx_for_callback.clone();
+
+            // リソースタイプと件数をメッセージから抽出
+            let (resource_type, resource_count) = Self::parse_progress_message(&message);
+
+            tokio::spawn(async move {
+                ScanService::update_progress(&scan_id, progress, message.clone()).await;
+                let _ = tx
+                    .send(ScanProgressEvent {
+                        scan_id,
+                        event_type: if resource_count.is_some() {
+                            "resource".to_string()
+                        } else {
+                            "progress".to_string()
+                        },
+                        progress,
+                        message,
+                        resource_type,
+                        resource_count,
+                        data: None,
+                    })
+                    .await;
+            });
+        });
+
+        scanner.scan(progress_callback).await
+    }
+
+    /// 進捗メッセージからリソースタイプと件数を抽出
+    fn parse_progress_message(message: &str) -> (Option<String>, Option<usize>) {
+        // パターン: "XXXのスキャン完了: N件"
+        if message.contains("完了:") && message.contains("件") {
+            let parts: Vec<&str> = message.split("完了:").collect();
+            if parts.len() == 2 {
+                // リソースタイプを抽出
+                let resource_type = parts[0]
+                    .replace("のスキャン", "")
+                    .replace("IAM ", "")
+                    .trim()
+                    .to_lowercase();
+
+                // 件数を抽出
+                let count_str = parts[1].replace("件", "").trim().to_string();
+                if let Ok(count) = count_str.parse::<usize>() {
+                    return (Some(resource_type), Some(count));
+                }
+            }
+        }
+        (None, None)
     }
 
     pub async fn get_scan_result(scan_id: &str) -> Option<ScanResponse> {

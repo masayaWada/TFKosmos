@@ -34,6 +34,12 @@ pub struct ScanConfig {
     pub scan_targets: HashMap<String, bool>,
     #[serde(default)]
     pub filters: HashMap<String, String>,
+
+    // Performance options
+    /// タグ情報を取得するかどうか（デフォルト: true）
+    /// 大規模環境ではfalseにすることでスキャン速度が向上
+    #[serde(default = "default_true")]
+    pub include_tags: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

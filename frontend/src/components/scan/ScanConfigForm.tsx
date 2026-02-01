@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   scanApi,
@@ -6,6 +6,7 @@ import {
   azureApi,
   AzureSubscription,
   AzureResourceGroup,
+  ScanProgressEvent,
 } from "../../api/scan";
 import ErrorMessage from "../common/ErrorMessage";
 import { formStyles } from "../../styles/formStyles";
@@ -200,29 +201,102 @@ export default function ScanConfigForm({
     }
   };
 
+  // SSE スキャンのキャンセル用ref
+  const scanAbortedRef = useRef(false);
+
+  /**
+   * SSEストリーミングを使用してスキャンを実行
+   * ブラウザがSSEに対応していない場合やエラーが発生した場合はポーリングにフォールバック
+   */
   const handleScan = async () => {
     setLoading(true);
     setError(null);
     setProgress(0);
     setProgressMessage("スキャンを開始しています...");
     setScanId(null);
+    scanAbortedRef.current = false;
 
+    const config: ScanConfig = {
+      provider,
+      scan_targets: scanTargets,
+      filters: namePrefix ? { name_prefix: namePrefix } : {},
+    };
+
+    if (provider === "aws") {
+      if (profile) config.profile = profile;
+      if (assumeRoleArn) config.assume_role_arn = assumeRoleArn;
+    } else {
+      if (subscriptionId) config.subscription_id = subscriptionId;
+      if (scopeType) config.scope_type = scopeType;
+      if (scopeValue) config.scope_value = scopeValue;
+    }
+
+    // SSEストリーミングを試行
     try {
-      const config: ScanConfig = {
-        provider,
-        scan_targets: scanTargets,
-        filters: namePrefix ? { name_prefix: namePrefix } : {},
-      };
+      await handleScanWithStreaming(config);
+    } catch (streamError) {
+      console.warn("SSE streaming failed, falling back to polling:", streamError);
+      // SSEが失敗した場合はポーリングにフォールバック
+      await handleScanWithPolling(config);
+    }
+  };
 
-      if (provider === "aws") {
-        if (profile) config.profile = profile;
-        if (assumeRoleArn) config.assume_role_arn = assumeRoleArn;
-      } else {
-        if (subscriptionId) config.subscription_id = subscriptionId;
-        if (scopeType) config.scope_type = scopeType;
-        if (scopeValue) config.scope_value = scopeValue;
-      }
+  /**
+   * SSEストリーミングでスキャンを実行
+   */
+  const handleScanWithStreaming = async (config: ScanConfig) => {
+    let completedScanId: string | null = null;
 
+    await scanApi.scanStream(config, {
+      onProgress: (event: ScanProgressEvent) => {
+        if (scanAbortedRef.current) return;
+        setProgress(event.progress);
+        setProgressMessage(event.message);
+        if (event.scan_id) {
+          setScanId(event.scan_id);
+        }
+      },
+      onResource: (event: ScanProgressEvent) => {
+        if (scanAbortedRef.current) return;
+        setProgress(event.progress);
+        const resourceInfo = event.resource_type && event.resource_count !== undefined
+          ? `${event.resource_type}: ${event.resource_count}件`
+          : event.message;
+        setProgressMessage(resourceInfo);
+      },
+      onCompleted: (event: ScanProgressEvent) => {
+        if (scanAbortedRef.current) return;
+        setProgress(100);
+        setProgressMessage("スキャンが完了しました");
+        setLoading(false);
+        completedScanId = event.scan_id;
+
+        if (onScanComplete) {
+          onScanComplete(event.scan_id);
+        }
+        navigate(`/resources/${event.scan_id}`);
+      },
+      onError: (error) => {
+        if (scanAbortedRef.current) return;
+        const message = error instanceof Error
+          ? error.message
+          : (error as ScanProgressEvent).message || "スキャンに失敗しました";
+        setError(message);
+        setLoading(false);
+      },
+    });
+
+    // completedイベントが発火しなかった場合（SSE接続が切れた場合など）
+    if (!completedScanId && !scanAbortedRef.current) {
+      throw new Error("SSE stream ended without completion");
+    }
+  };
+
+  /**
+   * ポーリングでスキャンを実行（フォールバック）
+   */
+  const handleScanWithPolling = async (config: ScanConfig) => {
+    try {
       const result =
         provider === "aws"
           ? await scanApi.scanAws(config)
@@ -232,6 +306,11 @@ export default function ScanConfigForm({
       setScanId(currentScanId);
 
       const progressInterval = setInterval(async () => {
+        if (scanAbortedRef.current) {
+          clearInterval(progressInterval);
+          return;
+        }
+
         try {
           const status = await scanApi.getStatus(currentScanId);
           setProgress(status.progress || 0);
